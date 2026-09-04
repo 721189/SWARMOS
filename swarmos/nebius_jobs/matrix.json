@@ -1,0 +1,45 @@
+{
+  "project": "SWARMOS-Robustness-Evaluation",
+  "nebius_compute_cluster": "k8s-gpu-nemotron-west1",
+  "instance_type": "standard-8-v100",
+  "trials_per_config": 20,
+  "parameter_sweep": {
+    "fleet_size": [4, 6, 8, 12, 16],
+    "task_density": [5, 10, 15, 25],
+    "failure_scenarios": [
+      {
+        "name": "nominal",
+        "motor_failure_rate": 0.0,
+        "rf_jamming_active": false,
+        "packet_loss_rate": 0.0
+      },
+      {
+        "name": "mild_attrition",
+        "motor_failure_rate": 0.15,
+        "rf_jamming_active": false,
+        "packet_loss_rate": 0.05
+      },
+      {
+        "name": "electronic_warfare_dense",
+        "motor_failure_rate": 0.20,
+        "rf_jamming_active": true,
+        "packet_loss_rate": 0.30
+      },
+      {
+        "name": "catastrophic_stress",
+        "motor_failure_rate": 0.40,
+        "rf_jamming_active": true,
+        "packet_loss_rate": 0.50
+      }
+    ],
+    "communication_ranges_m": [250, 350, 500]
+  },
+  "metrics_to_collect": [
+    "time_to_consensus_ms",
+    "mission_completion_rate_pct",
+    "fleet_attrition_survival_pct",
+    "re_auction_convergence_ms",
+    "total_energy_consumed_wh",
+    "communication_overhead_packets"
+  ]
+}
