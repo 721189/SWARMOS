@@ -148,8 +148,8 @@ export const NebiusMatrixViewer: React.FC = () => {
           </div>
           <div className="flex items-center gap-4 text-[11px] text-slate-300">
             <span>Mode: <strong className="text-purple-300 uppercase">{sweepData.benchmark_mode || 'Empirical Sweep'}</strong></span>
-            <span>Total Measured Rows: <strong className="text-sky-400">{sweepData.matrix_results?.length || 0}</strong></span>
-            <span>Trials Aggregated: <strong className="text-emerald-400">{sweepData.total_trials}</strong></span>
+            <span>Configurations: <strong className="text-sky-400">{sweepData.total_configurations || sweepData.matrix_results?.length || 0}</strong></span>
+            <span>Total Simulated Trials: <strong className="text-emerald-400">{sweepData.total_trials || 0}</strong></span>
           </div>
         </div>
       )}

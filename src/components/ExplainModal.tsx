@@ -132,7 +132,7 @@ export const ExplainModal: React.FC<ExplainModalProps> = ({ data, onClose }) => 
         <div className="px-6 py-3 border-t border-slate-800 bg-slate-950 flex items-center justify-between text-xs text-slate-400">
           <span className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            Consensus guaranteed convergence in O(N · M) rounds
+            Decentralized consensus convergence in polynomial rounds
           </span>
           <button
             onClick={onClose}

@@ -460,10 +460,15 @@ def run_experiment_matrix(
                             "trials": len(trial_metrics)
                         })
 
+    total_configs = len(results)
+    total_individual_trials = sum(r.get("trials", 1) for r in results)
+
     output_payload = {
         "timestamp": time.time(),
         "benchmark_mode": benchmark_mode,
-        "total_trials": len(results),
+        "total_configurations": total_configs,
+        "total_trials": total_individual_trials,
+        "trials_per_configuration": trials_per_config,
         "algorithms_evaluated": algorithms,
         "summary_table": results
     }
@@ -476,7 +481,7 @@ def run_experiment_matrix(
         except Exception as e:
             logger.warning(f"Could not write results to {out_path}: {e}")
 
-    logger.info(f"Experiment matrix complete. Processed {len(results)} aggregated configurations.")
+    logger.info(f"Experiment matrix complete. Processed {total_configs} configurations ({total_individual_trials} total trial runs).")
     return output_payload
 
 if __name__ == "__main__":

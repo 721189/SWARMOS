@@ -42,7 +42,7 @@
   * **Voiceover (VO)**: "Now, the real test: kinetic loss. Agent 1 suffers complete motor failure mid-mission. In traditional architectures, this halts the mission. In SWARMOS, the dynamic replanner instantly identifies the orphaned tasks."
 * **Timecode**: `1:25 - 1:45`
   * **Visual**: Neighboring drones `A2` and `A4` immediately exchange packets. The orphaned rescue task is rebidded in 14.8 ms. Agent `A2` redirects its flight path dynamically around an obstacle to pick up the casualty.
-  * **Voiceover (VO)**: "Surviving agents invalidate expired bids, run an emergency CBBA auction round, and re-allocate the mission workload within one simulation cycle. Zero human intervention. Mission continuity guaranteed."
+  * **Voiceover (VO)**: "Surviving agents invalidate expired bids, run an emergency CBBA auction round, and re-allocate the mission workload within one simulation cycle. Zero human intervention. Dynamic mission recovery achieved."
 
 ---
 

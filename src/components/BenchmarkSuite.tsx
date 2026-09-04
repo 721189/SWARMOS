@@ -11,17 +11,23 @@ import {
   Clock,
   Wifi,
   Radio,
-  Layers
+  Layers,
+  Send
 } from 'lucide-react';
 
 interface BaselineVariant {
   variant: string;
+  configurations?: number;
   trials: number;
   metrics: {
     mission_completion: { mean: number; std: number; ci_95: number };
     replan_latency_seconds: number;
     consensus_time_ms: number;
     fleet_survival_pct: number;
+    packets_generated_mean?: number;
+    packets_delivered_mean?: number;
+    packets_dropped_mean?: number;
+    observed_packet_loss_pct?: number;
   };
 }
 
@@ -29,7 +35,7 @@ export const BenchmarkSuite: React.FC = () => {
   const [testScenario, setTestScenario] = useState<'nominal' | 'mild_attrition' | 'electronic_warfare_dense' | 'catastrophic_stress'>('electronic_warfare_dense');
   const [isRunningTest, setIsRunningTest] = useState<boolean>(false);
   const [variants, setVariants] = useState<BaselineVariant[]>([]);
-  const [rawResults, setRawResults] = useState<any[]>([]);
+  const [benchmarkMode, setBenchmarkMode] = useState<string>('empirical_matrix');
 
   const fetchAblationResults = async () => {
     setIsRunningTest(true);
@@ -42,6 +48,7 @@ export const BenchmarkSuite: React.FC = () => {
       const data = await res.json();
       if (data && data.variants) {
         setVariants(data.variants);
+        if (data.benchmark_mode) setBenchmarkMode(data.benchmark_mode);
       }
     } catch (err) {
       console.error("Experiment ablation fetch error:", err);
@@ -57,15 +64,11 @@ export const BenchmarkSuite: React.FC = () => {
   const handleRunStressTest = async () => {
     setIsRunningTest(true);
     try {
-      const res = await fetch('/api/experiments/run', {
+      await fetch('/api/experiments/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scenario: testScenario })
+        body: JSON.stringify({ reduced: true })
       });
-      const data = await res.json();
-      if (data && data.matrix_results) {
-        setRawResults(data.matrix_results);
-      }
       await fetchAblationResults();
     } catch (err) {
       console.error("Experiment matrix run error:", err);
@@ -75,9 +78,9 @@ export const BenchmarkSuite: React.FC = () => {
   };
 
   const handleExportBenchmarkCSV = () => {
-    let csv = 'Algorithm,Trials,MeanCompletionPct,StdCompletion,CI95,ConsensusMs,ReplanLatencySec,FleetSurvivalPct\n';
+    let csv = 'Algorithm,Scenario,Configurations,TotalTrials,MeanCompletionPct,StdCompletion,CI95,ConsensusMs,ReplanLatencySec,FleetSurvivalPct,PacketsGen,PacketsDeliv,PacketsDropped,ObservedLossPct\n';
     variants.forEach((v) => {
-      csv += `"${v.variant}",${v.trials},${(v.metrics.mission_completion.mean * 100).toFixed(1)},${(v.metrics.mission_completion.std * 100).toFixed(2)},${(v.metrics.mission_completion.ci_95 * 100).toFixed(2)},${v.metrics.consensus_time_ms},${v.metrics.replan_latency_seconds},${v.metrics.fleet_survival_pct}\n`;
+      csv += `"${v.variant}","${testScenario}",${v.configurations || 0},${v.trials},${(v.metrics.mission_completion.mean * 100).toFixed(1)},${(v.metrics.mission_completion.std * 100).toFixed(2)},${(v.metrics.mission_completion.ci_95 * 100).toFixed(2)},${v.metrics.consensus_time_ms},${v.metrics.replan_latency_seconds},${v.metrics.fleet_survival_pct},${v.metrics.packets_generated_mean || 0},${v.metrics.packets_delivered_mean || 0},${v.metrics.packets_dropped_mean || 0},${v.metrics.observed_packet_loss_pct || 0}\n`;
     });
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -94,27 +97,27 @@ export const BenchmarkSuite: React.FC = () => {
     'Static': {
       role: 'Rigid Spatial Partitioning',
       pros: ['Zero mesh message exchange', 'Instant assignment at t=0'],
-      cons: ['Zero fault recovery (tasks on dead UAVs permanently abandoned)', '38% task unreachability under attrition']
+      cons: ['Zero dynamic recovery (tasks on failed UAVs abandoned)', 'High uncompleted task ratio under attrition']
     },
     'Greedy': {
-      role: 'Uncoordinated Heuristic',
+      role: 'Uncoordinated Local Heuristic',
       pros: ['No inter-agent communication overhead', 'Fast local target selection'],
-      cons: ['Severe target conflict (multiple drones fly to same task)', 'High spatial duplication and wasted battery']
+      cons: ['Severe target conflict (multiple drones navigate to same task)', 'Wasted battery & duplicate pathing']
     },
     'CBBA_Standard': {
       role: 'Choi et al. (IEEE Trans. Robotics 2009)',
-      pros: ['Guaranteed polynomial convergence at t=0', 'Decentralized conflict-free bundle consensus'],
-      cons: ['No dynamic re-auction trigger upon node attrition', 'Orphaned tasks remain unserviced after failures']
+      pros: ['Decentralized bundle auction architecture', 'Conflict-free bundle consensus under nominal state'],
+      cons: ['No dynamic re-auction trigger upon node attrition', 'Orphaned tasks remain unserviced after failure']
     },
     'CBBA_Recovery': {
       role: 'Dynamic CBBA with Fault Re-Auction',
-      pros: ['Autonomous failure detection & re-auction', 'High task recovery rate across surviving nodes'],
-      cons: ['Unprotected against malformed AI directives or jamming traps']
+      pros: ['Autonomous node loss detection & dynamic re-auction', 'High task recovery across surviving nodes'],
+      cons: ['No kinematic or bid ceiling validation filters']
     },
     'SWARMOS': {
-      role: 'Full Stack: AI Directive + Safety Compiler + CBBA + BFT Isolation',
-      pros: ['Deterministic safety compiler bounds (range/payload)', 'Byzantine fault isolation & jamming-aware routing', 'Sub-20ms distributed re-auction with 0% SPOF'],
-      cons: ['Requires 1-hop wireless mesh packet delivery']
+      role: 'Safety-Compiled CBBA + Sanity & Isolation Validator',
+      pros: ['Deterministic safety compiler bounds (range/payload/rate)', 'Consensus bid sanity & kinematic isolation validator', 'Fast distributed re-auction across dynamic mesh'],
+      cons: ['Requires connected RF mesh delivery']
     }
   };
 
@@ -133,7 +136,7 @@ export const BenchmarkSuite: React.FC = () => {
                   Empirical 5-Baseline Comparative Benchmark Suite
                 </h2>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-500/20 text-purple-300 border border-purple-500/30 font-semibold">
-                  EMPIRICAL SIMULATION • 240 TRIALS
+                  LIVE EMPIRICAL BENCHMARK • SCENARIO-FILTERED
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-0.5">
@@ -215,7 +218,7 @@ export const BenchmarkSuite: React.FC = () => {
                     <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold ${
                       isSWARMOS ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30' : 'bg-slate-800 text-slate-400'
                     }`}>
-                      {isSWARMOS ? 'PROPOSED STACK' : 'BASELINE'}
+                      {isSWARMOS ? 'EVALUATED STACK' : 'BASELINE'}
                     </span>
                     <h3 className="text-xs font-bold text-white mt-1">{v.variant}</h3>
                     <p className="text-[10px] text-slate-400 font-mono mt-0.5">{meta.role}</p>
@@ -248,7 +251,7 @@ export const BenchmarkSuite: React.FC = () => {
 
                   <div className="p-2 rounded bg-slate-900/80 border border-slate-800/60 text-[10px] space-y-1">
                     <div className="flex justify-between">
-                      <span className="text-slate-500">Consensus:</span>
+                      <span className="text-slate-500">Consensus Time:</span>
                       <span className="text-white font-bold">{v.metrics.consensus_time_ms.toFixed(1)} ms</span>
                     </div>
                     <div className="flex justify-between">
@@ -258,6 +261,18 @@ export const BenchmarkSuite: React.FC = () => {
                     <div className="flex justify-between">
                       <span className="text-slate-500">Fleet Survival:</span>
                       <span className="text-sky-400 font-bold">{v.metrics.fleet_survival_pct.toFixed(0)}%</span>
+                    </div>
+                    <div className="flex justify-between pt-1 border-t border-slate-800/80">
+                      <span className="text-slate-500">Packets (Deliv / Loss):</span>
+                      <span className="text-purple-300 font-bold">
+                        {v.metrics.packets_delivered_mean !== undefined 
+                          ? `${v.metrics.packets_delivered_mean.toFixed(0)} (${v.metrics.observed_packet_loss_pct?.toFixed(0)}% loss)` 
+                          : 'Recorded'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-[9px] text-slate-500">
+                      <span>Evaluated Runs:</span>
+                      <span className="text-slate-400">{v.trials} trials ({v.configurations || 0} configs)</span>
                     </div>
                   </div>
                 </div>
@@ -298,7 +313,7 @@ export const BenchmarkSuite: React.FC = () => {
             Empirical Takeaway across 5 Coordination Architectures:
           </div>
           <p className="leading-relaxed text-slate-300">
-            Static allocation and uncoordinated greedy heuristics collapse under hostile attrition due to either zero dynamic recovery or destructive spatial conflicts. Standard CBBA provides mathematical convergence at initialization but requires <strong>Dynamic Recovery + Deterministic Safety Compiling</strong> (SWARMOS) to maintain high mission completion when nodes drop out or RF communication links experience severe stochastic packet drops.
+            Static spatial allocation and uncoordinated greedy heuristics suffer under attrition due to either unrecovered orphaned tasks or spatial collision overlap. Standard CBBA provides distributed convergence at initialization, while adding <strong>Dynamic Recovery + Deterministic Safety Bounds</strong> enables the swarm to re-allocate mission workload when node attrition or jamming occurs across the mesh.
           </p>
         </div>
       </div>

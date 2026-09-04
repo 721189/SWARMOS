@@ -6,3 +6,17 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local experiment artifacts
+results/
+nebius_experiment_results.json
+swarmos/nebius_experiment_results.json

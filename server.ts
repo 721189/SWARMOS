@@ -42,7 +42,9 @@ app.post("/api/experiments/run", async (req, res) => {
       timestamp: new Date().toISOString(),
       benchmark_mode: experimentOutput.benchmark_mode || (isReduced ? "reduced_benchmark" : "full_matrix_sweep"),
       environment: process.env.NEBIUS_API_BASE ? "Nebius AI Cloud (k8s-gpu-nemotron-west1)" : "Local Python Swarm Simulation Engine",
+      total_configurations: experimentOutput.total_configurations || experimentOutput.summary_table?.length || 0,
       total_trials: experimentOutput.total_trials || 0,
+      trials_per_configuration: experimentOutput.trials_per_configuration || 1,
       algorithms_evaluated: experimentOutput.algorithms_evaluated || ["Static", "Greedy", "CBBA_Standard", "CBBA_Recovery", "SWARMOS"],
       matrix_results: experimentOutput.summary_table || []
     });
@@ -97,7 +99,18 @@ app.post("/api/experiments/ablation", async (req, res) => {
     const rawData = fs.readFileSync(resultsPath, "utf-8");
     const experimentOutput = JSON.parse(rawData);
 
-    const summaryTable: any[] = experimentOutput.summary_table || [];
+    const rawSummaryTable: any[] = experimentOutput.summary_table || [];
+    const requestedScenario = req.body?.scenario;
+
+    // Filter by scenario if specified (e.g. 'mild_attrition', 'electronic_warfare_dense', etc.)
+    let summaryTable = rawSummaryTable;
+    if (requestedScenario && requestedScenario !== 'all') {
+      const scenarioMatched = rawSummaryTable.filter(r => r.failure_mode === requestedScenario);
+      if (scenarioMatched.length > 0) {
+        summaryTable = scenarioMatched;
+      }
+    }
+
     const algorithms = ["Static", "Greedy", "CBBA_Standard", "CBBA_Recovery", "SWARMOS"];
 
     const variants = algorithms.map(algoName => {
@@ -132,9 +145,12 @@ app.post("/api/experiments/ablation", async (req, res) => {
       const stdComp = Math.sqrt(variance);
       const ci95 = 1.96 * (stdComp / Math.sqrt(algoRows.length));
 
+      const totalTrialsForVariant = algoRows.reduce((sum, r) => sum + (r.trials || 1), 0);
+
       return {
         variant: algoName,
-        trials: algoRows.length,
+        configurations: algoRows.length,
+        trials: totalTrialsForVariant,
         metrics: {
           mission_completion: {
             mean: Number((meanCompletion / 100.0).toFixed(3)),
@@ -155,6 +171,7 @@ app.post("/api/experiments/ablation", async (req, res) => {
     res.json({
       status: "completed",
       experiment_type: "ablation_and_baseline_comparison",
+      selected_scenario: requestedScenario || "all",
       benchmark_mode: experimentOutput.benchmark_mode || "empirical_matrix",
       timestamp: new Date().toISOString(),
       variants

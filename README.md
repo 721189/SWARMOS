@@ -21,10 +21,10 @@ SWARMOS implements the distributed multi-assignment auction protocol developed b
    where $\lambda \in (0, 1]$ is the temporal decay factor and $t_\tau$ is the predicted arrival timestamp.
 
 2. **Phase 2: Decentralized Consensus & Conflict Resolution**  
-   Agents broadcast winning bids $y_i$ and winning agent identities $z_i$ across 1-hop ad-hoc wireless links. Conflicts are resolved via deterministic discrete rule matrices (`UPDATE`, `RESET`, `LEAVE`), guaranteeing polynomial-time convergence without a centralized coordinator.
+   Agents broadcast winning bids $y_i$ and winning agent identities $z_i$ across 1-hop ad-hoc wireless links. Conflicts are resolved via deterministic discrete rule matrices (`UPDATE`, `RESET`, `LEAVE`), designed for polynomial-time convergence without a centralized coordinator.
 
-3. **Byzantine Fault Tolerant (BFT) Consensus Validator**  
-   Integrated directly into the Phase 2 consensus loop to validate incoming winning bids against physical ceiling bounds ($y_k \le 1.25 \times R_0$), verify kinematic displacement rates ($\Delta x / \Delta t \le v_{max}$), and quarantine untrusted or compromised nodes.
+3. **Consensus Sanity & Node Isolation Validator (Byzantine Mitigation)**  
+   Integrated directly into the Phase 2 consensus loop to validate incoming winning bids against physical ceiling bounds ($y_k \le 1.25 \times R_0$), verify kinematic displacement rates ($\Delta x / \Delta t \le v_{max}$), and quarantine untrusted or anomalous nodes from the consensus pool.
 
 ---
 
@@ -35,7 +35,7 @@ SWARMOS implements the distributed multi-assignment auction protocol developed b
 | **Full Matrix & Reduced Benchmark Modes** | Explicit CLI (`--reduced` or default full matrix) and API modes without hidden matrix slicing or synthetic truncations. |
 | **Network Packet Metrics** | Real stochastic RF channel drop in `SwarmEnvironment.transmit_packet` with physical distance attenuation and jamming degradation. Aggregates `packets_generated`, `packets_delivered`, `packets_dropped`, and `observed_packet_loss_pct`. |
 | **Baseline Differentiation Suite** | 5 genuinely distinct baselines (`Static`, `Greedy`, `CBBA_Standard`, `CBBA_Recovery`, `SWARMOS`) evaluated across multi-trial seeds. |
-| **BFT Integration** | `BftConsensusValidator` wired into `CBBAEngine` for bid sanity verification, kinematic telemetry validation, and automated node isolation. |
+| **Sanity & Isolation Validator** | `BftConsensusValidator` wired into `CBBAEngine` for bid sanity verification, kinematic telemetry validation, and automated node isolation. |
 | **Safe Subprocess Execution** | Zero shell string interpolation; all CLI bridges use positional argument vectors (`execFileSync`) with full standard error propagation. |
 | **Strict Error Handling** | API endpoints return HTTP 500 status codes with real failure payloads when simulator processes fail. |
 | **Empirical Frontend Consumption** | UI dynamically loads measured simulation output from `nebius_experiment_results.json` without hardcoded mockup constants. |
@@ -44,11 +44,11 @@ SWARMOS implements the distributed multi-assignment auction protocol developed b
 
 ## 3. Evaluated Coordination Baselines
 
-1. **Static Partitioning (`Static`)**: Fixed spatial assignment at $t=0$. Zero runtime mesh overhead, but zero fault recovery when an agent is lost.
+1. **Static Partitioning (`Static`)**: Fixed spatial assignment at $t=0$. Zero runtime mesh overhead, but zero dynamic recovery when an agent is lost.
 2. **Greedy Heuristic (`Greedy`)**: Uncoordinated local selection. High conflict rate where multiple agents attempt the same waypoint.
 3. **Standard CBBA (`CBBA_Standard`)**: Choi et al. (2009) decentralized bundle auction. Conflict-free initial allocation, but lacks dynamic reallocation for orphaned tasks on lost nodes.
 4. **CBBA with Dynamic Recovery (`CBBA_Recovery`)**: Detects node failure and immediately initiates a distributed re-auction for surviving operational nodes.
-5. **SWARMOS Full Stack (`SWARMOS`)**: Complete stack integrating deterministic safety compilation, dynamic CBBA re-auctioning, and BFT consensus validation.
+5. **SWARMOS Full Stack (`SWARMOS`)**: Complete stack integrating deterministic safety compilation, dynamic CBBA re-auctioning, and consensus sanity validation.
 
 ---
 

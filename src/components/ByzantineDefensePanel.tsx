@@ -56,14 +56,14 @@ export const ByzantineDefensePanel: React.FC<ByzantineDefensePanelProps> = ({
                 <ShieldAlert className="w-5 h-5" />
               </span>
               <h2 className="text-xl font-bold tracking-tight text-slate-100">
-                GPS-Denied CRL & Byzantine Fault Tolerant (BFT) Consensus
+                GPS-Denied CRL &amp; Consensus Sanity &amp; Node Isolation Validator
               </h2>
               <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                2f + 1 Quorum Verified
+                Dynamic Trust &amp; Quarantine Pool
               </span>
             </div>
             <p className="text-sm text-slate-400 max-w-3xl">
-              National-level electronic warfare defense. When GNSS is jammed or adversary drones inject malicious bids and spoofed telemetry, SWARMOS maintains Cooperative Relative Localization (CRL) and automatically purges rogue nodes from the consensus mesh.
+              Electronic warfare defense and fault mitigation. When GNSS is jammed or adversary drones inject anomalous bids and spoofed telemetry, SWARMOS maintains Cooperative Relative Localization (CRL) and automatically isolates anomalous nodes from the consensus pool.
             </p>
           </div>
 
@@ -224,14 +224,14 @@ export const ByzantineDefensePanel: React.FC<ByzantineDefensePanelProps> = ({
             </div>
           </div>
 
-          {/* Theoretical Proof Box */}
+          {/* Theoretical Validation Box */}
           <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg p-3 text-[11px] text-slate-400 space-y-1">
             <div className="font-bold text-slate-300 font-mono text-xs flex items-center gap-1.5">
               <Lock className="w-3.5 h-3.5 text-indigo-400" />
-              Mathematical Convergence Proof:
+              Consensus Sanity &amp; Isolation Principles:
             </div>
             <p className="leading-relaxed">
-              In a network of <span className="text-slate-200 font-mono">N</span> drones with at most <span className="text-slate-200 font-mono">f</span> Byzantine nodes, CBBA-BFT guarantees convergence to an optimal collision-free allocation iff <span className="text-emerald-400 font-mono">N ≥ 3f + 1</span>.
+              In an ad-hoc swarm mesh, the Consensus Sanity &amp; Isolation Validator enforces strict bid bounds (<span className="text-slate-200 font-mono">y_k ≤ 1.25 · R_0</span>) and kinematic consistency (<span className="text-slate-200 font-mono">Δx/Δt ≤ v_max</span>). Nodes violating physical constraints are automatically penalized and quarantined from consensus voting.
             </p>
           </div>
         </div>
