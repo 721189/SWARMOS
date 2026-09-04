@@ -1,6 +1,6 @@
 {
   "name": "SWARMOS Project Bootstrapper",
-  "description": "Complete project scaffold generator, CBBA multi-agent swarm simulator, AI mission planner, and Nebius experiment runner.",
+  "description": "Complete project scaffold generator, CBBA multi-agent swarm simulator, AI mission planner, ATAK Cursor-on-Target (CoT) gateway, GPS-denied Byzantine BFT consensus, and Nebius experiment runner.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

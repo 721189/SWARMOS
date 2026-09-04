@@ -123,3 +123,47 @@ export interface ScaffoldFile {
   category: 'core' | 'ai' | 'engine' | 'jobs' | 'ui' | 'utils' | 'docs' | 'hardware' | 'benchmark';
   content: string;
 }
+
+// --- GPS-Denied & Byzantine Resilient PNT & Consensus ---
+export type ByzantineAttackType = 'BID_POISON' | 'TELEMETRY_SPOOF' | 'SYBIL_FLOOD' | 'NONE';
+
+export interface ByzantineState {
+  isGpsDenied: boolean;
+  crlActive: boolean; // Cooperative Relative Localization active via UWB
+  uwbMeshNoiseM: number;
+  byzantineAgents: Record<string, {
+    attack: ByzantineAttackType;
+    trustScore: number; // 0 to 100
+    status: 'TRUSTED' | 'SUSPECT' | 'QUARANTINED' | 'EJECTED';
+    violations: string[];
+  }>;
+  bftThresholdPct: number; // 67% (2f+1 quorum)
+  blockedPoisonBids: number;
+  spoofedVectorsMitigated: number;
+}
+
+// --- ATAK / WinTAK & Cursor-on-Target (CoT) ---
+export interface CotEvent {
+  id: string;
+  uid: string;
+  type: string; // e.g., 'a-f-A-M-F-Q' (Friendly Airborne Multi-Rotor Drone)
+  callsign: string;
+  lat: number;
+  lon: number;
+  hae: number; // Height Above Ellipsoid (m)
+  speedKts: number;
+  headingDeg: number;
+  time: string;
+  stale: string;
+  batteryPct: number;
+  assignedTaskId: string | null;
+  rawXml: string;
+}
+
+export interface TakServerStatus {
+  connected: boolean;
+  endpoint: string;
+  protocol: 'UDP_MULTICAST' | 'TLS_TCP' | 'COT_STREAM';
+  packetsOut: number;
+  lastHeartbeat: string;
+}

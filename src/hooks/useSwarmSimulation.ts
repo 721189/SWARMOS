@@ -7,8 +7,51 @@ import {
   TelemetryKpis, 
   ExplainTaskData,
   MavlinkPacket,
-  BlackBoxSnapshot
+  BlackBoxSnapshot,
+  ByzantineState,
+  ByzantineAttackType,
+  CotEvent,
+  TakServerStatus
 } from '../types';
+
+export const agentCallsignMap: Record<string, string> = {
+  'A1': 'VIPER-01',
+  'A2': 'VIPER-02',
+  'A3': 'VIPER-03',
+  'A4': 'VIPER-04',
+  'A5': 'VIPER-05',
+  'A6': 'VIPER-06',
+};
+
+export const canvasToGeo = (x: number, y: number): { lat: number; lon: number } => {
+  const baseLat = 32.8812;
+  const baseLon = -117.2345;
+  const lat = baseLat + ((275 - y) * 0.000045);
+  const lon = baseLon + ((x - 450) * 0.000054);
+  return { lat: Number(lat.toFixed(6)), lon: Number(lon.toFixed(6)) };
+};
+
+export const generateCotXml = (agent: AgentEntity, callsign: string): string => {
+  const geo = canvasToGeo(agent.position[0], agent.position[1]);
+  const now = new Date();
+  const timeStr = now.toISOString();
+  const staleTime = new Date(now.getTime() + 25000).toISOString();
+  const speedKts = Math.round(agent.speed * agent.health.propulsion * 0.54);
+  const headingDeg = Math.round((Math.atan2(agent.position[1] - agent.homeBase[1], agent.position[0] - agent.homeBase[0]) * 180 / Math.PI + 360) % 360);
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<event version="2.0" uid="SWARMOS-${callsign}" type="a-f-A-M-F-Q" how="m-g" time="${timeStr}" start="${timeStr}" stale="${staleTime}">
+  <point lat="${geo.lat.toFixed(6)}" lon="${geo.lon.toFixed(6)}" hae="125.0" ce="1.5" le="2.0"/>
+  <detail>
+    <contact callsign="${callsign}" endpoint="192.168.10.${agent.id.replace('A','')}:4242"/>
+    <track speed="${speedKts}.0" course="${headingDeg}.0"/>
+    <status battery="${Math.round(agent.health.battery)}" readiness="true"/>
+    <precisionlocation altsrc="UWB_CRL" geopointsrc="UWB_MESH"/>
+    <takv os="Linux-aarch64" version="4.10.0" device="OrinNano" platform="WinTAK"/>
+    <remarks>Assigned: ${agent.currentTaskId || 'NONE'} | Status: ${agent.status} | Packets: ${agent.messagesSent}</remarks>
+  </detail>
+</event>`;
+};
 
 export function useSwarmSimulation() {
   const [isRunning, setIsRunning] = useState<boolean>(true);
@@ -239,6 +282,51 @@ export function useSwarmSimulation() {
   const [obstacles, setObstacles] = useState<ObstacleEntity[]>(initialObstacles);
   const [threatZones, setThreatZones] = useState<ThreatZoneEntity[]>(initialThreats);
   const [commLinks, setCommLinks] = useState<[string, string][]>([]);
+
+  // --- Byzantine & GPS-Denied State ---
+  const [byzantineState, setByzantineState] = useState<ByzantineState>({
+    isGpsDenied: false,
+    crlActive: false,
+    uwbMeshNoiseM: 0.14,
+    byzantineAgents: {
+      'A1': { attack: 'NONE', trustScore: 100, status: 'TRUSTED', violations: [] },
+      'A2': { attack: 'NONE', trustScore: 100, status: 'TRUSTED', violations: [] },
+      'A3': { attack: 'NONE', trustScore: 100, status: 'TRUSTED', violations: [] },
+      'A4': { attack: 'NONE', trustScore: 100, status: 'TRUSTED', violations: [] },
+      'A5': { attack: 'NONE', trustScore: 100, status: 'TRUSTED', violations: [] },
+      'A6': { attack: 'NONE', trustScore: 100, status: 'TRUSTED', violations: [] },
+    },
+    bftThresholdPct: 66.7,
+    blockedPoisonBids: 0,
+    spoofedVectorsMitigated: 0,
+  });
+
+  const byzantineStateRef = useRef<ByzantineState>(byzantineState);
+  useEffect(() => {
+    byzantineStateRef.current = byzantineState;
+  }, [byzantineState]);
+
+  // Tactical visual overlays
+  const [tacticalMode, setTacticalMode] = useState<{
+    showMilStdSymbology: boolean;
+    showUwbRangingMesh: boolean;
+    showCotCallsigns: boolean;
+  }>({
+    showMilStdSymbology: false,
+    showUwbRangingMesh: false,
+    showCotCallsigns: true,
+  });
+
+  // ATAK CoT and TAK Server states
+  const [cotEvents, setCotEvents] = useState<CotEvent[]>([]);
+  const [takServerStatus, setTakServerStatus] = useState<TakServerStatus>({
+    connected: true,
+    endpoint: '239.2.3.1:6969',
+    protocol: 'UDP_MULTICAST',
+    packetsOut: 184,
+    lastHeartbeat: new Date().toISOString().substring(11, 19),
+  });
+
   const [kpis, setKpis] = useState<TelemetryKpis>({
     taskCompletionPct: 0,
     completedTasks: 0,
@@ -266,7 +354,13 @@ export function useSwarmSimulation() {
     }));
 
     const updatedTasks = currentTasks.map((t) => ({ ...t }));
-    const operationalAgents = updatedAgents.filter((a) => a.health.propulsion > 0.1 && a.health.battery > 5);
+    const operationalAgents = updatedAgents.filter((a) => {
+      const byz = byzantineStateRef.current.byzantineAgents[a.id];
+      if (byz && (byz.status === 'QUARANTINED' || byz.status === 'EJECTED')) {
+        return false; // BFT 2f+1 Quorum isolates quarantined/ejected nodes
+      }
+      return a.health.propulsion > 0.1 && a.health.battery > 5;
+    });
 
     if (operationalAgents.length === 0) return { updatedAgents, updatedTasks };
 
@@ -280,13 +374,45 @@ export function useSwarmSimulation() {
       for (const agent of operationalAgents) {
         if (agent.bundle.length >= agent.maxBundleSize) continue;
 
+        const byz = byzantineStateRef.current.byzantineAgents[agent.id];
+
         // Marginal score = BaseReward * lambda^(arrival_time * urgency) - distPenalty
         const dist = Math.hypot(task.position[0] - agent.position[0], task.position[1] - agent.position[1]);
         const speed = Math.max(10, agent.speed * agent.health.propulsion);
         const arrivalTime = dist / speed;
         const temporalDecay = Math.pow(0.95, arrivalTime * task.urgencyWeight);
         const pathCost = dist * 0.05;
-        const marginalBid = Math.max(1, task.baseReward * temporalDecay - pathCost);
+        let marginalBid = Math.max(1, task.baseReward * temporalDecay - pathCost);
+
+        // BFT Defense: Detect and quarantine Byzantine Bid Poisoning
+        if (byz && byz.attack === 'BID_POISON') {
+          const rogueBid = 9999;
+          const maxTheoretical = task.baseReward * 1.25;
+          if (rogueBid > maxTheoretical) {
+            setTimeout(() => {
+              setByzantineState((prev) => {
+                const ag = prev.byzantineAgents[agent.id];
+                if (!ag) return prev;
+                const newTrust = Math.max(0, ag.trustScore - 40);
+                const newStatus = newTrust <= 20 ? 'EJECTED' : newTrust <= 50 ? 'SUSPECT' : 'TRUSTED';
+                return {
+                  ...prev,
+                  blockedPoisonBids: prev.blockedPoisonBids + 1,
+                  byzantineAgents: {
+                    ...prev.byzantineAgents,
+                    [agent.id]: {
+                      ...ag,
+                      trustScore: newTrust,
+                      status: newStatus,
+                      violations: [...ag.violations, `Bid ${rogueBid} > bound ${maxTheoretical.toFixed(0)} on ${task.id}`].slice(-4),
+                    },
+                  },
+                };
+              });
+            }, 0);
+            continue; // Reject rogue bid under BFT consensus rule
+          }
+        }
 
         if (marginalBid > highestBid) {
           highestBid = marginalBid;
@@ -522,6 +648,71 @@ export function useSwarmSimulation() {
           }
         }
 
+        // Periodic Byzantine Telemetry Spoof Detection (UWB Trilateration Residuals)
+        if (tickRef.current % 10 === 0) {
+          nextAgents.forEach((agent) => {
+            const byz = byzantineStateRef.current.byzantineAgents[agent.id];
+            if (byz && byz.attack === 'TELEMETRY_SPOOF' && byz.status !== 'QUARANTINED' && byz.status !== 'EJECTED') {
+              setTimeout(() => {
+                setByzantineState((prev) => {
+                  const ag = prev.byzantineAgents[agent.id];
+                  if (!ag) return prev;
+                  const newTrust = Math.max(0, ag.trustScore - 25);
+                  const newStatus = newTrust <= 20 ? 'EJECTED' : newTrust <= 50 ? 'SUSPECT' : 'TRUSTED';
+                  return {
+                    ...prev,
+                    spoofedVectorsMitigated: prev.spoofedVectorsMitigated + 1,
+                    byzantineAgents: {
+                      ...prev.byzantineAgents,
+                      [agent.id]: {
+                        ...ag,
+                        trustScore: newTrust,
+                        status: newStatus,
+                        violations: [...ag.violations, `Tick ${tickRef.current}: UWB residual error Δ=28.4m > 5.0m threshold`].slice(-4),
+                      },
+                    },
+                  };
+                });
+              }, 0);
+            }
+          });
+        }
+
+        // Periodic ATAK Cursor-on-Target (CoT) Event Stream Generator
+        if (tickRef.current % 4 === 0) {
+          const events: CotEvent[] = nextAgents.map((ag) => {
+            const callsign = agentCallsignMap[ag.id] || `VIPER-0${ag.id.replace('A', '')}`;
+            const geo = canvasToGeo(ag.position[0], ag.position[1]);
+            const speedKts = Math.round(ag.speed * ag.health.propulsion * 0.54);
+            const headingDeg = Math.round((Math.atan2(ag.position[1] - ag.homeBase[1], ag.position[0] - ag.homeBase[0]) * 180 / Math.PI + 360) % 360);
+            const now = new Date();
+
+            return {
+              id: `COT-${ag.id}-${tickRef.current}`,
+              uid: `SWARMOS-${callsign}`,
+              type: 'a-f-A-M-F-Q',
+              callsign,
+              lat: geo.lat,
+              lon: geo.lon,
+              hae: 125.0,
+              speedKts,
+              headingDeg,
+              time: now.toISOString(),
+              stale: new Date(now.getTime() + 20000).toISOString(),
+              batteryPct: Math.round(ag.health.battery),
+              assignedTaskId: ag.currentTaskId,
+              rawXml: generateCotXml(ag, callsign),
+            };
+          });
+
+          setCotEvents(events);
+          setTakServerStatus((prev) => ({
+            ...prev,
+            packetsOut: prev.packetsOut + events.length,
+            lastHeartbeat: new Date().toISOString().substring(11, 19),
+          }));
+        }
+
         return nextAgents;
       });
 
@@ -734,6 +925,98 @@ export function useSwarmSimulation() {
     setIsExplainOpen(true);
   };
 
+  const toggleGpsDenied = () => {
+    setByzantineState((prev) => {
+      const nextGpsDenied = !prev.isGpsDenied;
+      if (nextGpsDenied) {
+        addLog('[EW PNT ALERT] GPS L1/L2 constellation denied across theater. Swarm transitioned to UWB ranging mesh CRL & dead-reckoning.');
+      } else {
+        addLog('[EW PNT] GPS constellation acquired. Swarm restored GNSS absolute positioning.');
+      }
+      return {
+        ...prev,
+        isGpsDenied: nextGpsDenied,
+        crlActive: nextGpsDenied,
+      };
+    });
+
+    setAgents((prev) =>
+      prev.map((a) => ({
+        ...a,
+        health: {
+          ...a.health,
+          gps: byzantineStateRef.current.isGpsDenied ? 1.0 : 0.0,
+        },
+      }))
+    );
+  };
+
+  const injectByzantineAttack = (agentId: string, attack: ByzantineAttackType) => {
+    const isAttacking = attack !== 'NONE';
+    setByzantineState((prev) => {
+      const target = prev.byzantineAgents[agentId] || { attack: 'NONE', trustScore: 100, status: 'TRUSTED', violations: [] };
+      return {
+        ...prev,
+        byzantineAgents: {
+          ...prev.byzantineAgents,
+          [agentId]: {
+            ...target,
+            attack,
+            status: isAttacking ? 'SUSPECT' : 'TRUSTED',
+            trustScore: isAttacking ? 60 : 100,
+            violations: isAttacking ? [`Adversary mode activated: ${attack}`] : [],
+          },
+        },
+      };
+    });
+
+    if (isAttacking) {
+      addLog(`[CYBER ATTACK] Adversary injected ${attack} into node ${agentId} (${agentCallsignMap[agentId] || agentId}). BFT consensus filter actively monitoring.`);
+      setTimeout(() => {
+        triggerAuction();
+      }, 50);
+    } else {
+      addLog(`[CYBER RECOVERY] Node ${agentId} scrubbed & restored to TRUSTED status.`);
+      setTimeout(() => {
+        triggerAuction();
+      }, 50);
+    }
+  };
+
+  const remediateByzantine = (agentId: string) => {
+    injectByzantineAttack(agentId, 'NONE');
+  };
+
+  const exportAtakMissionPackage = () => {
+    const headerXml = `<?xml version="1.0" encoding="UTF-8"?>
+<!-- SWARMOS ATAK / WinTAK Mission Data Package -->
+<!-- Generated at: ${new Date().toISOString()} -->
+<!-- Coordinate System: WGS-84 / Ellipsoidal -->
+<missionPackage version="2.0">
+  <metadata name="SWARMOS_TACTICAL_PACKAGE" author="SWARMOS Ground Station" time="${new Date().toISOString()}"/>
+  <events count="${cotEvents.length}">
+${cotEvents.map((e) => e.rawXml).join('\n\n')}
+  </events>
+  <targets count="${tasks.length}">
+${tasks.map((t) => {
+  const geo = canvasToGeo(t.position[0], t.position[1]);
+  return `    <target id="${t.id}" type="${t.type}" lat="${geo.lat}" lon="${geo.lon}" status="${t.status}" assignedTo="${t.assignedAgentId || 'NONE'}"/>`;
+}).join('\n')}
+  </targets>
+</missionPackage>`;
+
+    const blob = new Blob([headerXml], { type: 'application/xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `swarmos_atak_mission_package_${Date.now()}.xml`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    addLog('Exported official ATAK CoT Mission Data Package (.xml).');
+  };
+
   return {
     agents: activeScrubbedSnapshot ? activeScrubbedSnapshot.agents : agents,
     tasks: activeScrubbedSnapshot ? activeScrubbedSnapshot.tasks : tasks,
@@ -751,11 +1034,16 @@ export function useSwarmSimulation() {
     mavlinkPackets,
     blackBoxSnapshots,
     activeScrubbedSnapshot,
+    byzantineState,
+    tacticalMode,
+    cotEvents,
+    takServerStatus,
     setSelectedAgentId,
     setSelectedTaskId,
     setIsRunning,
     setSimSpeed,
     setIsExplainOpen,
+    setTacticalMode,
     injectMotorFailure,
     injectJammer,
     injectSAM,
@@ -763,6 +1051,10 @@ export function useSwarmSimulation() {
     loadPresetMission,
     resetSimulation,
     generateExplainData,
+    toggleGpsDenied,
+    injectByzantineAttack,
+    remediateByzantine,
+    exportAtakMissionPackage,
     scrubToSnapshot: setActiveScrubbedSnapshot,
   };
 }
