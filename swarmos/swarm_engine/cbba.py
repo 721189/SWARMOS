@@ -15,11 +15,18 @@ import time
 from typing import Dict, List, Tuple, Optional, Any, Set
 from .agents import Agent, AgentStatus
 from .tasks import Task, TaskStatus
+from .bft_cbba import BftConsensusValidator, BftAgentStatus
 
 class CBBAEngine:
-    def __init__(self, lambda_decay: float = 0.95, bid_epsilon: float = 1e-4):
+    def __init__(
+        self,
+        lambda_decay: float = 0.95,
+        bid_epsilon: float = 1e-4,
+        bft_validator: Optional[BftConsensusValidator] = None
+    ):
         self.lambda_decay = lambda_decay
         self.bid_epsilon = bid_epsilon
+        self.bft_validator = bft_validator
         self.consensus_iterations = 0
         self.has_converged = False
         self.decision_logs: List[Dict[str, Any]] = []
@@ -149,6 +156,12 @@ class CBBAEngine:
                 if not agent_k.health.is_operational():
                     continue
 
+                # BFT Quarantine / Ejection check
+                if self.bft_validator is not None:
+                    k_status = self.bft_validator.agent_statuses.get(k_id, BftAgentStatus.TRUSTED)
+                    if k_status in (BftAgentStatus.QUARANTINED, BftAgentStatus.EJECTED):
+                        continue
+
                 # Simulate real network transmission between k and i
                 if env is not None and hasattr(env, "transmit_packet"):
                     delivered = env.transmit_packet(k_id, i_id, payload_bytes=128)
@@ -163,6 +176,15 @@ class CBBAEngine:
 
                     y_k = agent_k.winning_bids.get(task_id, 0.0)
                     z_k = agent_k.winning_agents.get(task_id, None)
+
+                    # BFT Validation on claimed winning bid
+                    if self.bft_validator is not None and z_k is not None and y_k > 0:
+                        task_obj = tasks.get(task_id)
+                        base_r = task_obj.base_reward if task_obj else 100.0
+                        valid_bid, reason = self.bft_validator.validate_bid(z_k, task_id, y_k, base_r)
+                        if not valid_bid:
+                            self._record_decision(i_id, task_id, "REJECT_BFT", reason or "Poisoned BFT bid")
+                            continue
 
                     s_ik = agent_i.timestamps.get(k_id, 0.0)
                     s_kk = agent_k.timestamps.get(k_id, current_time)

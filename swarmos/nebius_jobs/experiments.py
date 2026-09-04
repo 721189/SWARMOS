@@ -25,6 +25,7 @@ from swarm_engine.agents import Agent, AgentStatus
 from swarm_engine.tasks import Task, TaskType, TaskStatus
 from swarm_engine.environment import SwarmEnvironment, Obstacle, ThreatZone
 from swarm_engine.cbba import CBBAEngine
+from swarm_engine.bft_cbba import BftConsensusValidator, BftAgentStatus
 from swarm_engine.failures import FailureInjector
 from swarm_engine.metrics import SwarmMetricsTracker
 from ai_layer.safety_compiler import SafetyCompiler
@@ -115,7 +116,16 @@ def run_single_baseline_trial(
         env.add_task(t)
         tasks[t.id] = t
 
-    cbba = CBBAEngine(lambda_decay=0.95, bid_epsilon=1e-4)
+    cbba_engine = None
+    bft_validator = None
+    if algorithm == "SWARMOS":
+        bft_validator = BftConsensusValidator(total_agents=fleet_size, max_velocity_mps=80.0)
+        for aid in agents.keys():
+            bft_validator.register_agent(aid)
+        cbba = CBBAEngine(lambda_decay=0.95, bid_epsilon=1e-4, bft_validator=bft_validator)
+    else:
+        cbba = CBBAEngine(lambda_decay=0.95, bid_epsilon=1e-4, bft_validator=None)
+
     failure_injector = FailureInjector(env)
     metrics = SwarmMetricsTracker()
 
@@ -343,8 +353,14 @@ def run_single_baseline_trial(
         "observed_packet_loss_pct": kpis["observed_packet_loss_pct"]
     }
 
-def run_experiment_matrix(matrix_path: str = "swarmos/nebius_jobs/matrix.json") -> Dict[str, Any]:
-    """Runs systematic Cartesian product experiments defined in matrix.json with multi-trial aggregation."""
+def run_experiment_matrix(
+    matrix_path: str = "swarmos/nebius_jobs/matrix.json",
+    reduced_benchmark: bool = False
+) -> Dict[str, Any]:
+    """
+    Runs systematic Cartesian product experiments defined in matrix.json with multi-trial aggregation.
+    If reduced_benchmark is True, executes an accelerated subset explicitly tagged as 'reduced_benchmark'.
+    """
     if not os.path.exists(matrix_path):
         matrix_path = "nebius_jobs/matrix.json"
     if not os.path.exists(matrix_path):
@@ -355,25 +371,41 @@ def run_experiment_matrix(matrix_path: str = "swarmos/nebius_jobs/matrix.json") 
         with open(matrix_path, "r") as f:
             spec = json.load(f)
 
-    fleet_sizes = spec.get("parameter_sweep", {}).get("fleet_size", [4, 8, 12])
-    task_densities = spec.get("parameter_sweep", {}).get("task_density", [5, 10, 15])
-    scenarios = spec.get("parameter_sweep", {}).get("failure_scenarios", [{"name": "nominal", "packet_loss_rate": 0.0}])
-    comm_ranges = spec.get("parameter_sweep", {}).get("communication_ranges_m", [250.0, 350.0])
-    trials_per_config = spec.get("trials_per_config", 3)
+    all_fleet_sizes = spec.get("parameter_sweep", {}).get("fleet_size", [4, 6, 8, 12, 16])
+    all_task_densities = spec.get("parameter_sweep", {}).get("task_density", [5, 10, 15, 25])
+    all_scenarios = spec.get("parameter_sweep", {}).get("failure_scenarios", [{"name": "nominal", "packet_loss_rate": 0.0}])
+    all_comm_ranges = spec.get("parameter_sweep", {}).get("communication_ranges_m", [250.0, 350.0, 500.0])
+    configured_trials = spec.get("trials_per_config", 3)
     algorithms = ["Static", "Greedy", "CBBA_Standard", "CBBA_Recovery", "SWARMOS"]
 
-    logger.info("Executing Empirical SWARMOS Monte Carlo Matrix...")
+    if reduced_benchmark:
+        benchmark_mode = "reduced_benchmark"
+        fleet_sizes = [4, 8]
+        task_densities = [5, 10]
+        scenarios = all_scenarios[:2]
+        comm_ranges = [250.0, 350.0]
+        trials_per_config = 2
+        logger.info("Executing SWARMOS Reduced Benchmark Suite (Fast Verification Mode)...")
+    else:
+        benchmark_mode = "full_matrix_sweep"
+        fleet_sizes = all_fleet_sizes
+        task_densities = all_task_densities
+        scenarios = all_scenarios
+        comm_ranges = all_comm_ranges
+        trials_per_config = configured_trials
+        logger.info("Executing Full SWARMOS Cartesian Monte Carlo Matrix Sweep...")
+
     results = []
 
-    for fs in fleet_sizes[:3]:
-        for td in task_densities[:2]:
+    for fs in fleet_sizes:
+        for td in task_densities:
             for scen in scenarios:
                 p_loss = scen.get("packet_loss_rate", 0.0)
                 scen_name = scen.get("name", "nominal")
-                for cr in comm_ranges[:2]:
+                for cr in comm_ranges:
                     for algo in algorithms:
                         trial_metrics = []
-                        for trial_idx in range(min(trials_per_config, 3)):
+                        for trial_idx in range(trials_per_config):
                             seed = 1000 + (fs * 100) + (td * 10) + trial_idx
                             t_res = run_single_baseline_trial(
                                 fleet_size=fs,
@@ -391,11 +423,19 @@ def run_experiment_matrix(matrix_path: str = "swarmos/nebius_jobs/matrix.json") 
                         conv_times = [m["mean_convergence_ms"] for m in trial_metrics]
                         replan_times = [m["mean_replan_latency"] for m in trial_metrics]
                         surv_rates = [m["fleet_survival_pct"] for m in trial_metrics]
+                        gen_pkts = [m["packets_generated"] for m in trial_metrics]
+                        deliv_pkts = [m["packets_delivered"] for m in trial_metrics]
+                        drop_pkts = [m["packets_dropped"] for m in trial_metrics]
+                        loss_rates = [m["observed_packet_loss_pct"] for m in trial_metrics]
 
-                        mean_comp = sum(comp_rates) / len(comp_rates)
-                        mean_conv = sum(conv_times) / len(conv_times)
-                        mean_replan = sum(replan_times) / len(replan_times)
-                        mean_surv = sum(surv_rates) / len(surv_rates)
+                        mean_comp = sum(comp_rates) / max(1, len(comp_rates))
+                        mean_conv = sum(conv_times) / max(1, len(conv_times))
+                        mean_replan = sum(replan_times) / max(1, len(replan_times))
+                        mean_surv = sum(surv_rates) / max(1, len(surv_rates))
+                        mean_gen = sum(gen_pkts) / max(1, len(gen_pkts))
+                        mean_deliv = sum(deliv_pkts) / max(1, len(deliv_pkts))
+                        mean_drop = sum(drop_pkts) / max(1, len(drop_pkts))
+                        mean_loss = sum(loss_rates) / max(1, len(loss_rates))
 
                         std_comp = math.sqrt(sum((x - mean_comp)**2 for x in comp_rates) / max(1, len(comp_rates)))
                         ci_95 = 1.96 * (std_comp / math.sqrt(len(comp_rates)))
@@ -413,11 +453,16 @@ def run_experiment_matrix(matrix_path: str = "swarmos/nebius_jobs/matrix.json") 
                             "mean_convergence_ms": round(mean_conv, 2),
                             "mean_replan_latency": round(mean_replan, 2),
                             "fleet_survival_pct": round(mean_surv, 1),
+                            "packets_generated_mean": round(mean_gen, 1),
+                            "packets_delivered_mean": round(mean_deliv, 1),
+                            "packets_dropped_mean": round(mean_drop, 1),
+                            "observed_packet_loss_pct": round(mean_loss, 1),
                             "trials": len(trial_metrics)
                         })
 
     output_payload = {
         "timestamp": time.time(),
+        "benchmark_mode": benchmark_mode,
         "total_trials": len(results),
         "algorithms_evaluated": algorithms,
         "summary_table": results

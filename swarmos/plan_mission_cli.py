@@ -4,7 +4,14 @@ Can be invoked by server.ts to ensure Python remains the single source of truth.
 """
 
 import sys
+import os
 import json
+
+# Ensure swarmos and root paths are in sys.path
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, BASE_DIR)
+sys.path.insert(0, os.path.join(BASE_DIR, 'swarmos'))
+
 from ai_layer.mission_parser import MissionParser
 from ai_layer.safety_compiler import SafetyCompiler
 
