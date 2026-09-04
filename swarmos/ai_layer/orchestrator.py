@@ -44,7 +44,6 @@ class SwarmOrchestrator:
 
     def _initialize_default_world(self) -> None:
         """Seed default agents and geographic obstacle features."""
-        # 1. Spawn fleet in a distributed deployment arc
         for i in range(self.config.NUM_AGENTS):
             agent_id = f"A{i+1}"
             spawn_x = 120.0 + (i * 90.0)
@@ -57,15 +56,15 @@ class SwarmOrchestrator:
             )
             self.env.add_agent(agent)
 
-        # 2. Add realistic obstacles (urban buildings / mountain peaks)
         self.env.add_obstacle(Obstacle("OBS_1", 380, 240, 110, 160, "BUILDING"))
         self.env.add_obstacle(Obstacle("OBS_2", 690, 380, 130, 130, "BUILDING"))
         self.env.add_obstacle(Obstacle("OBS_3", 520, 110, 140, 90, "NO_FLY"))
 
-    def load_mission(self, prompt: str) -> Dict[str, Any]:
+    def load_mission(self, prompt: str, raw_manifest: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Parses natural language mission, compiles safety constraints, and generates initial task allocation."""
-        logger.info(f"Loading new mission briefing: '{prompt}'")
-        raw_manifest = self.mission_parser.parse_directive(prompt)
+        logger.info(f"Loading mission: '{prompt}'")
+        if raw_manifest is None:
+            raw_manifest = self.mission_parser.parse_directive(prompt)
         
         # Enforce deterministic safety compiler validation
         manifest = self.safety_compiler.compile_and_validate(raw_manifest)
@@ -88,7 +87,7 @@ class SwarmOrchestrator:
         for t in tasks:
             self.env.add_task(t)
 
-        logger.info(f"Loaded {len(tasks)} tasks for mission '{manifest.get('objective')}'. Safety verdict: {manifest.get('safety_verdict')}. Starting CBBA auction...")
+        logger.info(f"Loaded {len(tasks)} tasks for mission '{manifest.get('mission_name')}'. Safety verdict: {manifest.get('safety_verdict')}. Starting CBBA auction...")
         self.execute_full_consensus()
         return manifest
 
@@ -100,14 +99,15 @@ class SwarmOrchestrator:
             agents=self.env.agents,
             tasks=self.env.tasks,
             communication_links=comm_links,
-            max_iterations=self.config.CONSENSUS_ROUNDS
+            max_iterations=self.config.CONSENSUS_ROUNDS,
+            env=self.env
         )
         duration_ms = self.metrics.stop_consensus_timer()
         logger.info(f"Consensus reached: {converged} in {duration_ms:.2f}ms")
 
         # Assign targets to agents from their path sequence
         self._sync_agent_task_execution()
-        self.metrics.record_snapshot(self.env.agents, self.env.tasks, converged)
+        self.metrics.record_snapshot(self.env.agents, self.env.tasks, converged, env=self.env)
         return converged
 
     def _sync_agent_task_execution(self) -> None:
@@ -147,7 +147,7 @@ class SwarmOrchestrator:
             )
 
             # Reached task site
-            if dist_to_task < 8.0:
+            if dist_to_task < 12.0:
                 agent.status = AgentStatus.EXECUTING
                 agent.task_execution_timer += dt
 
@@ -184,8 +184,8 @@ class SwarmOrchestrator:
 
         # 4. Periodic telemetry recording
         converged = self.cbba.has_converged
-        snapshot = self.metrics.record_snapshot(self.env.agents, self.env.tasks, converged)
-        kpis = self.metrics.compute_summary_kpis(self.env.agents, self.env.tasks)
+        snapshot = self.metrics.record_snapshot(self.env.agents, self.env.tasks, converged, env=self.env)
+        kpis = self.metrics.compute_summary_kpis(self.env.agents, self.env.tasks, env=self.env)
 
         return {
             "snapshot": snapshot,

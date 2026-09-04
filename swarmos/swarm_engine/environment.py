@@ -1,10 +1,12 @@
 """
 Environment and spatial world model for SWARMOS.
 Handles 2D physics bounding, obstacle collision detection, dynamic threat zones,
-RF electronic warfare / jamming bubbles, and peer-to-peer ad-hoc mesh connectivity.
+RF electronic warfare / jamming bubbles, and peer-to-peer ad-hoc mesh connectivity
+with deterministic stochastic packet drop modeling.
 """
 
 import math
+import random
 from dataclasses import dataclass
 from typing import List, Tuple, Dict, Optional, Set
 from .agents import Agent, AgentStatus
@@ -38,16 +40,41 @@ class ThreatZone:
         return dist <= self.radius
 
 class SwarmEnvironment:
-    def __init__(self, width: int = 1200, height: int = 800, comm_range: float = 350.0):
+    def __init__(
+        self,
+        width: int = 1200,
+        height: int = 800,
+        comm_range: float = 350.0,
+        packet_loss_rate: float = 0.0,
+        seed: int = 42
+    ):
         self.width = width
         self.height = height
         self.comm_range = comm_range
+        self.packet_loss_rate = packet_loss_rate
+        self.rng = random.Random(seed)
+        
         self.agents: Dict[str, Agent] = {}
         self.tasks: Dict[str, Task] = {}
         self.obstacles: List[Obstacle] = []
         self.threat_zones: List[ThreatZone] = []
         self.elapsed_time: float = 0.0
         self.communication_links: Set[Tuple[str, str]] = set()
+
+        # Real Network Telemetry
+        self.packets_generated: int = 0
+        self.packets_delivered: int = 0
+        self.packets_dropped: int = 0
+        self.bytes_transmitted: int = 0
+
+    def set_seed(self, seed: int) -> None:
+        self.rng = random.Random(seed)
+
+    def reset_network_telemetry(self) -> None:
+        self.packets_generated = 0
+        self.packets_delivered = 0
+        self.packets_dropped = 0
+        self.bytes_transmitted = 0
 
     def add_agent(self, agent: Agent) -> None:
         self.agents[agent.id] = agent
@@ -60,6 +87,30 @@ class SwarmEnvironment:
 
     def add_threat(self, threat: ThreatZone) -> None:
         self.threat_zones.append(threat)
+
+    def transmit_packet(self, sender_id: str, receiver_id: str, payload_bytes: int = 128) -> bool:
+        """
+        Simulates physical wireless packet transmission across 1-hop mesh link.
+        Calculates loss based on distance attenuation, EW jamming, and stochastic channel drop.
+        """
+        pair = (min(sender_id, receiver_id), max(sender_id, receiver_id))
+        if pair not in self.communication_links:
+            # Physical link out of range or blocked
+            self.packets_generated += 1
+            self.packets_dropped += 1
+            self.bytes_transmitted += payload_bytes
+            return False
+
+        self.packets_generated += 1
+        self.bytes_transmitted += payload_bytes
+
+        # Stochastic RF packet loss
+        if self.rng.random() < self.packet_loss_rate:
+            self.packets_dropped += 1
+            return False
+
+        self.packets_delivered += 1
+        return True
 
     def update_mesh_network(self) -> Set[Tuple[str, str]]:
         """
@@ -111,12 +162,10 @@ class SwarmEnvironment:
                         in_jammer = True
                         agent.health.comms_transceiver = max(0.1, agent.health.comms_transceiver - (0.1 * dt * tz.intensity))
                     elif tz.threat_type == "RADAR_SAM":
-                        # SAM lethal zone damages propulsion and sensor systems
                         agent.health.propulsion = max(0.0, agent.health.propulsion - (0.15 * dt * tz.intensity))
                         agent.health.sensor_suite = max(0.0, agent.health.sensor_suite - (0.1 * dt * tz.intensity))
             
             if not in_jammer and agent.health.comms_transceiver < 0.9:
-                # Gradual comms recovery outside jamming zone
                 agent.health.comms_transceiver = min(1.0, agent.health.comms_transceiver + (0.2 * dt))
 
         # 2. Kinematic updates

@@ -6,12 +6,13 @@ Choi, Brunet, and How (IEEE Transactions on Robotics, 2009).
 Consists of two alternating phases:
 1. Bundle Construction (Greedy marginal utility maximization with temporal path insertion)
 2. Consensus Conflict Resolution (Discrete action rules: UPDATE, RESET, LEAVE via 1-hop wireless mesh)
+   with real stochastic packet drop evaluation.
 """
 
 import copy
 import math
 import time
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List, Tuple, Optional, Any, Set
 from .agents import Agent, AgentStatus
 from .tasks import Task, TaskStatus
 
@@ -119,19 +120,21 @@ class CBBAEngine:
         self,
         agents: Dict[str, Agent],
         tasks: Dict[str, Task],
-        communication_links: List[Tuple[str, str]]
+        communication_links: Any,
+        env: Optional[Any] = None
     ) -> bool:
         """
         Phase 2: Local 1-hop peer communication and conflict resolution.
         Applies standard CBBA rules table between agent i and neighbor k.
-        Returns True if assignments changed (consensus still ongoing), False if converged.
+        Transmits actual mesh packets through env when provided, observing real packet drops.
         """
         changes_occurred = False
         current_time = time.time()
 
         # Build adjacency neighbor map
         neighbors_map: Dict[str, List[str]] = {aid: [] for aid in agents.keys()}
-        for a1, a2 in communication_links:
+        for pair in communication_links:
+            a1, a2 = pair[0], pair[1]
             if a1 in neighbors_map and a2 in neighbors_map:
                 neighbors_map[a1].append(a2)
                 neighbors_map[a2].append(a1)
@@ -145,6 +148,13 @@ class CBBAEngine:
                 agent_k = agents[k_id]
                 if not agent_k.health.is_operational():
                     continue
+
+                # Simulate real network transmission between k and i
+                if env is not None and hasattr(env, "transmit_packet"):
+                    delivered = env.transmit_packet(k_id, i_id, payload_bytes=128)
+                    if not delivered:
+                        # Dropped packet: agent_i does not receive agent_k's state this iteration
+                        continue
 
                 # Process every known task j in the universe
                 for task_id in tasks.keys():
@@ -174,7 +184,6 @@ class CBBAEngine:
                         elif z_i is None:
                             action = "UPDATE"
                         else:
-                            # z_i is some third agent m
                             s_im = agent_i.timestamps.get(z_i, 0.0)
                             if s_kk > s_im:
                                 action = "UPDATE"
@@ -201,7 +210,6 @@ class CBBAEngine:
                             if s_kk > s_im:
                                 action = "UPDATE"
                     else:
-                        # z_k is a 3rd agent m
                         m_id = z_k
                         s_km = agent_k.timestamps.get(m_id, 0.0)
                         s_im = agent_i.timestamps.get(m_id, 0.0)
@@ -221,7 +229,6 @@ class CBBAEngine:
                         elif z_i is None:
                             action = "UPDATE"
                         else:
-                            # z_i is 4th agent p
                             p_id = z_i
                             s_ip = agent_i.timestamps.get(p_id, 0.0)
                             if s_km > s_ip and y_k > y_i:
@@ -244,8 +251,6 @@ class CBBAEngine:
                             self._record_decision(i_id, task_id, "RESET", f"Reset bid on outbid/expired assignment")
 
             # Post-consensus pruning:
-            # If agent_i was outbid on a task in its bundle, it must drop that task
-            # AND all subsequent tasks in its bundle (CBBA cascade release rule)
             dropped_idx = -1
             for b_idx, tid in enumerate(agent_i.bundle):
                 if agent_i.winning_agents.get(tid) != agent_i.id:
@@ -253,7 +258,6 @@ class CBBAEngine:
                     break
 
             if dropped_idx != -1:
-                # Truncate bundle and path from dropped_idx onwards
                 for drop_tid in agent_i.bundle[dropped_idx:]:
                     if drop_tid in agent_i.path:
                         agent_i.path.remove(drop_tid)
@@ -280,8 +284,9 @@ class CBBAEngine:
         self,
         agents: Dict[str, Agent],
         tasks: Dict[str, Task],
-        communication_links: List[Tuple[str, str]],
-        max_iterations: int = 12
+        communication_links: Any,
+        max_iterations: int = 15,
+        env: Optional[Any] = None
     ) -> bool:
         """
         Runs full alternating Bundle Construction & Consensus Resolution iterations
@@ -292,7 +297,7 @@ class CBBAEngine:
             # Phase 1: Construction
             self.phase1_bundle_construction(agents, tasks)
             # Phase 2: Consensus
-            changed = self.phase2_consensus_conflict_resolution(agents, tasks, communication_links)
+            changed = self.phase2_consensus_conflict_resolution(agents, tasks, communication_links, env=env)
             if not changed and it > 0:
                 self.has_converged = True
                 return True
