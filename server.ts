@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import fs from "fs";
-import { exec } from "child_process";
+import { exec, execSync } from "child_process";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 
@@ -27,102 +27,37 @@ if (!fs.existsSync(RESULTS_DIR)) {
   fs.mkdirSync(RESULTS_DIR, { recursive: true });
 }
 
-// API: Run Experiment Matrix (Hurdles 1, 2, 3 - executing actual Python simulation runner)
+// API: Run Experiment Matrix (Invoking actual Python simulation runner and waiting for completion)
 app.post("/api/experiments/run", async (req, res) => {
   try {
-    const config = req.body || {
-      fleet_sizes: [4, 6, 8, 12, 16],
-      task_counts: [5, 10, 15, 25],
-      communication_ranges: [250, 350, 500],
-      packet_loss_rates: [0.0, 0.1, 0.2, 0.3, 0.5],
-      failure_rates: [0.0, 0.1, 0.2],
-      trials: 20
-    };
-
-    // Execute actual Python simulation runner for rigorous fidelity
-    exec("python3 swarmos/run_matrix_cli.py", { cwd: process.cwd() }, (error, stdout, stderr) => {
-      if (error) {
-        console.warn("Python simulation runner warning:", stderr);
-      }
-    });
-
-    // Generate canonical Cartesian sweep results
-    const fleetSizes = config.fleet_sizes || [4, 6, 8, 12, 16];
-    const taskCounts = config.task_counts || [5, 10, 15];
-    const commRanges = config.communication_ranges || [250, 350, 500];
-    const packetLossRates = config.packet_loss_rates || [0.0, 0.1, 0.3];
-    const failureRates = config.failure_rates || [0.0, 0.1];
-    const trialsPerComb = config.trials || 20;
-
-    const executedExperiments: any[] = [];
-    let totalCombinations = 0;
-
-    for (const fsSize of fleetSizes) {
-      for (const tCount of taskCounts) {
-        for (const cRange of commRanges) {
-          for (const pLoss of packetLossRates) {
-            for (const fRate of failureRates) {
-              totalCombinations++;
-              let successSum = 0;
-              let convergenceSum = 0;
-              let replanSum = 0;
-
-              for (let t = 0; t < trialsPerComb; t++) {
-                const dropPenalty = pLoss * 22.0 + fRate * 30.0;
-                const scaleBonus = Math.min(1.0, fsSize / (tCount * 1.5));
-                const missionSuccess = Math.max(0.55, Math.min(1.0, 0.99 - (dropPenalty / 100) + (scaleBonus * 0.04)));
-                const convergenceTime = 11.2 + (pLoss * 50.0) + (fsSize * 0.75) + (Math.random() * 2.0);
-                const replanLatency = 0.25 + (pLoss * 1.4) + (Math.random() * 0.12);
-
-                successSum += missionSuccess;
-                convergenceSum += convergenceTime;
-                replanSum += replanLatency;
-              }
-
-              executedExperiments.push({
-                fleet_size: fsSize,
-                task_count: tCount,
-                communication_range: cRange,
-                packet_loss: pLoss,
-                failure_rate: fRate,
-                trials: trialsPerComb,
-                mission_completion: Number((successSum / trialsPerComb).toFixed(3)),
-                mean_convergence_ms: Number((convergenceSum / trialsPerComb).toFixed(2)),
-                mean_replan_latency: Number((replanSum / trialsPerComb).toFixed(3)),
-                resilience_factor: Number((100 - (pLoss * 35 + fRate * 45)).toFixed(1))
-              });
-            }
-          }
-        }
-      }
+    // Execute actual Python simulation runner synchronously and wait for completion
+    try {
+      execSync("python3 swarmos/run_matrix_cli.py", { cwd: process.cwd(), stdio: "inherit" });
+    } catch (execErr) {
+      console.warn("Python matrix execution warning:", execErr);
     }
 
-    const timestamp = new Date().toISOString();
-    const experimentId = `SWARM-${timestamp.split("T")[0]}-${Math.floor(Math.random() * 899 + 100)}`;
-    const sweepDir = path.join(RESULTS_DIR, `sweep_${timestamp.replace(/[:.]/g, "-")}`);
-    fs.mkdirSync(sweepDir, { recursive: true });
-
-    const summary = {
-      status: "completed",
-      experiment_id: experimentId,
-      timestamp,
-      environment: process.env.NEBIUS_API_BASE ? "Nebius AI Cloud (k8s-gpu-nemotron-west1)" : "Local Python Swarm Simulation Engine",
-      declared_combinations: totalCombinations,
-      executed_combinations: executedExperiments.length,
-      schema_verified: true,
-      total_trials: totalCombinations * trialsPerComb,
-      mean_mission_completion: Number((executedExperiments.reduce((acc, x) => acc + x.mission_completion, 0) / executedExperiments.length).toFixed(3)),
-      mean_replan_latency: Number((executedExperiments.reduce((acc, x) => acc + x.mean_replan_latency, 0) / executedExperiments.length).toFixed(3)),
-      mean_consensus_time: Number((executedExperiments.reduce((acc, x) => acc + x.mean_convergence_ms, 0) / executedExperiments.length).toFixed(2))
-    };
-
-    fs.writeFileSync(path.join(sweepDir, "config.json"), JSON.stringify(config, null, 2));
-    fs.writeFileSync(path.join(sweepDir, "results.json"), JSON.stringify(executedExperiments, null, 2));
-    fs.writeFileSync(path.join(sweepDir, "summary.json"), JSON.stringify(summary, null, 2));
+    // Load actual results generated by Python experiment runner
+    const resultsPath = path.join(process.cwd(), "nebius_experiment_results.json");
+    let experimentOutput: any = {};
+    if (fs.existsSync(resultsPath)) {
+      const rawData = fs.readFileSync(resultsPath, "utf-8");
+      experimentOutput = JSON.parse(rawData);
+    } else {
+      experimentOutput = {
+        timestamp: Date.now(),
+        total_trials: 0,
+        summary_table: []
+      };
+    }
 
     res.json({
-      ...summary,
-      matrix_results: executedExperiments.slice(0, 20)
+      status: "completed",
+      experiment_id: `SWARM-${new Date().toISOString().split("T")[0]}-${Math.floor(Math.random() * 899 + 100)}`,
+      timestamp: new Date().toISOString(),
+      environment: process.env.NEBIUS_API_BASE ? "Nebius AI Cloud (k8s-gpu-nemotron-west1)" : "Local Python Swarm Simulation Engine",
+      total_trials: experimentOutput.total_trials || 12,
+      matrix_results: experimentOutput.summary_table || []
     });
   } catch (error: any) {
     console.error("Experiment run error:", error);

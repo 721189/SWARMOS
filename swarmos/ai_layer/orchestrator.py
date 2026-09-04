@@ -18,6 +18,7 @@ from swarm_engine.metrics import SwarmMetricsTracker
 from .mission_parser import MissionParser
 from .replanner import DynamicReplanner
 from .explainer import SwarmExplainer
+from .safety_compiler import SafetyCompiler
 
 class SwarmOrchestrator:
     def __init__(self, config: Optional[SwarmConfig] = None):
@@ -36,6 +37,7 @@ class SwarmOrchestrator:
         self.replanner = DynamicReplanner(self.env, self.cbba)
         self.explainer = SwarmExplainer(self.env, self.cbba)
         self.mission_parser = MissionParser()
+        self.safety_compiler = SafetyCompiler()
 
         self.current_mission_manifest: Optional[Dict[str, Any]] = None
         self._initialize_default_world()
@@ -61,9 +63,12 @@ class SwarmOrchestrator:
         self.env.add_obstacle(Obstacle("OBS_3", 520, 110, 140, 90, "NO_FLY"))
 
     def load_mission(self, prompt: str) -> Dict[str, Any]:
-        """Parses natural language mission and generates initial task allocation."""
+        """Parses natural language mission, compiles safety constraints, and generates initial task allocation."""
         logger.info(f"Loading new mission briefing: '{prompt}'")
-        manifest = self.mission_parser.parse_directive(prompt)
+        raw_manifest = self.mission_parser.parse_directive(prompt)
+        
+        # Enforce deterministic safety compiler validation
+        manifest = self.safety_compiler.compile_and_validate(raw_manifest)
         self.current_mission_manifest = manifest
 
         # Clear existing uncompleted tasks
@@ -78,12 +83,12 @@ class SwarmOrchestrator:
             if agent.health.is_operational():
                 agent.status = AgentStatus.IDLE
 
-        # Ingest new tasks
+        # Ingest new tasks from compiled manifest
         tasks = self.mission_parser.convert_to_tasks(manifest)
         for t in tasks:
             self.env.add_task(t)
 
-        logger.info(f"Loaded {len(tasks)} tasks for mission '{manifest.get('mission_name')}'. Starting CBBA auction...")
+        logger.info(f"Loaded {len(tasks)} tasks for mission '{manifest.get('objective')}'. Safety verdict: {manifest.get('safety_verdict')}. Starting CBBA auction...")
         self.execute_full_consensus()
         return manifest
 
