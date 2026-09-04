@@ -1,0 +1,150 @@
+{
+  "timestamp": 1788554786.8379145,
+  "total_trials": 12,
+  "summary_table": [
+    {
+      "fleet_size": 4,
+      "task_count": 10,
+      "failure_mode": "nominal",
+      "sim_time_sec": 60.0,
+      "completion_rate_pct": 0.0,
+      "avg_consensus_ms": 15.4,
+      "replan_avg_latency_ms": 0.0,
+      "resilience_factor_pct": 0.0,
+      "fleet_survival_pct": 100.0,
+      "total_packets": 0
+    },
+    {
+      "fleet_size": 4,
+      "task_count": 10,
+      "failure_mode": "mild_attrition",
+      "sim_time_sec": 60.0,
+      "completion_rate_pct": 0.0,
+      "avg_consensus_ms": 14.81,
+      "replan_avg_latency_ms": 0.0,
+      "resilience_factor_pct": 0.0,
+      "fleet_survival_pct": 75.0,
+      "total_packets": 0
+    },
+    {
+      "fleet_size": 4,
+      "task_count": 10,
+      "failure_mode": "electronic_warfare_dense",
+      "sim_time_sec": 60.0,
+      "completion_rate_pct": 0.0,
+      "avg_consensus_ms": 14.06,
+      "replan_avg_latency_ms": 0.0,
+      "resilience_factor_pct": 0.0,
+      "fleet_survival_pct": 75.0,
+      "total_packets": 0
+    },
+    {
+      "fleet_size": 4,
+      "task_count": 10,
+      "failure_mode": "catastrophic_stress",
+      "sim_time_sec": 60.0,
+      "completion_rate_pct": 0.0,
+      "avg_consensus_ms": 14.51,
+      "replan_avg_latency_ms": 0.0,
+      "resilience_factor_pct": 0.0,
+      "fleet_survival_pct": 75.0,
+      "total_packets": 0
+    },
+    {
+      "fleet_size": 6,
+      "task_count": 10,
+      "failure_mode": "nominal",
+      "sim_time_sec": 60.0,
+      "completion_rate_pct": 60.0,
+      "avg_consensus_ms": 13.41,
+      "replan_avg_latency_ms": 11.06,
+      "resilience_factor_pct": 60.0,
+      "fleet_survival_pct": 100.0,
+      "total_packets": 0
+    },
+    {
+      "fleet_size": 6,
+      "task_count": 10,
+      "failure_mode": "mild_attrition",
+      "sim_time_sec": 60.0,
+      "completion_rate_pct": 60.0,
+      "avg_consensus_ms": 13.49,
+      "replan_avg_latency_ms": 11.03,
+      "resilience_factor_pct": 60.0,
+      "fleet_survival_pct": 83.3,
+      "total_packets": 0
+    },
+    {
+      "fleet_size": 6,
+      "task_count": 10,
+      "failure_mode": "electronic_warfare_dense",
+      "sim_time_sec": 35.4,
+      "completion_rate_pct": 100.0,
+      "avg_consensus_ms": 13.37,
+      "replan_avg_latency_ms": 8.47,
+      "resilience_factor_pct": 100.0,
+      "fleet_survival_pct": 83.3,
+      "total_packets": 0
+    },
+    {
+      "fleet_size": 6,
+      "task_count": 10,
+      "failure_mode": "catastrophic_stress",
+      "sim_time_sec": 28.0,
+      "completion_rate_pct": 100.0,
+      "avg_consensus_ms": 13.32,
+      "replan_avg_latency_ms": 7.04,
+      "resilience_factor_pct": 100.0,
+      "fleet_survival_pct": 66.7,
+      "total_packets": 0
+    },
+    {
+      "fleet_size": 8,
+      "task_count": 10,
+      "failure_mode": "nominal",
+      "sim_time_sec": 60.0,
+      "completion_rate_pct": 80.0,
+      "avg_consensus_ms": 18.75,
+      "replan_avg_latency_ms": 14.51,
+      "resilience_factor_pct": 80.0,
+      "fleet_survival_pct": 100.0,
+      "total_packets": 0
+    },
+    {
+      "fleet_size": 8,
+      "task_count": 10,
+      "failure_mode": "mild_attrition",
+      "sim_time_sec": 60.0,
+      "completion_rate_pct": 80.0,
+      "avg_consensus_ms": 18.73,
+      "replan_avg_latency_ms": 14.44,
+      "resilience_factor_pct": 80.0,
+      "fleet_survival_pct": 87.5,
+      "total_packets": 0
+    },
+    {
+      "fleet_size": 8,
+      "task_count": 10,
+      "failure_mode": "electronic_warfare_dense",
+      "sim_time_sec": 60.0,
+      "completion_rate_pct": 80.0,
+      "avg_consensus_ms": 18.83,
+      "replan_avg_latency_ms": 14.43,
+      "resilience_factor_pct": 80.0,
+      "fleet_survival_pct": 87.5,
+      "total_packets": 0
+    },
+    {
+      "fleet_size": 8,
+      "task_count": 10,
+      "failure_mode": "catastrophic_stress",
+      "sim_time_sec": 60.0,
+      "completion_rate_pct": 80.0,
+      "avg_consensus_ms": 19.32,
+      "replan_avg_latency_ms": 14.53,
+      "resilience_factor_pct": 80.0,
+      "fleet_survival_pct": 62.5,
+      "total_packets": 0
+    }
+  ]
+}

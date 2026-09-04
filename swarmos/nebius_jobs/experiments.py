@@ -9,7 +9,6 @@ import os
 import random
 import time
 from typing import Dict, List, Any
-import numpy as np
 
 from utils.config import SwarmConfig
 from utils.logger import logger
@@ -74,16 +73,17 @@ def run_single_trial(fleet_size: int, task_count: int, failure_mode: str, comm_r
         "sim_time_sec": round(total_sim_time, 1),
         "completion_rate_pct": kpis["task_completion_pct"],
         "avg_consensus_ms": kpis["avg_consensus_ms"],
-        "replan_avg_latency_ms": round(float(np.mean(replan_latencies)) if replan_latencies else 0.0, 2),
+        "replan_avg_latency_ms": round(float(sum(replan_latencies) / len(replan_latencies)) if replan_latencies else 0.0, 2),
         "resilience_factor_pct": kpis["resilience_factor_pct"],
         "fleet_survival_pct": kpis["operational_fleet_pct"],
         "total_packets": kpis["total_mesh_packets"]
     }
 
-def run_experiment_matrix(matrix_path: str = "nebius_jobs/matrix.json") -> Dict[str, Any]:
+def run_experiment_matrix(matrix_path: str = "swarmos/nebius_jobs/matrix.json") -> Dict[str, Any]:
     """Runs systematic experiments defined in matrix.json."""
     if not os.path.exists(matrix_path):
-        # Fallback path if run from subdirectory
+        matrix_path = "nebius_jobs/matrix.json"
+    if not os.path.exists(matrix_path):
         matrix_path = "matrix.json"
 
     with open(matrix_path, "r") as f:
