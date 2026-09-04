@@ -13,6 +13,36 @@ export interface TaskEntity {
   assignedAgentId: string | null;
   progress: number; // 0 to 1
   description: string;
+  prerequisites?: string[]; // Task IDs that must be completed before execution
+}
+
+export interface MavlinkPacket {
+  timestamp: string;
+  agentId: string;
+  msgType: 'HEARTBEAT' | 'SET_POSITION_TARGET_LOCAL_NED' | 'GLOBAL_POSITION_INT' | 'STATUSTEXT' | 'MISSION_ITEM_INT';
+  payload: Record<string, string | number | boolean>;
+  seq: number;
+}
+
+export interface BlackBoxSnapshot {
+  timestamp: number;
+  tick: number;
+  agents: AgentEntity[];
+  tasks: TaskEntity[];
+  commLinks: [string, string][];
+  event: string | null;
+}
+
+export interface AlgorithmBenchmark {
+  name: string;
+  type: 'CBBA_DECENTRALIZED' | 'CENTRALIZED_GCS' | 'GREEDY_FIRST_CHOICE';
+  taskCompletionRate: number; // %
+  spofResilience: number;     // %
+  avgRecoveryTimeMs: number;  // ms
+  bandwidthPerAgentKb: number; // KB/s
+  energyEfficiencyPct: number; // %
+  pros: string[];
+  cons: string[];
 }
 
 export interface AgentHealth {
@@ -90,6 +120,6 @@ export interface ExplainTaskData {
 export interface ScaffoldFile {
   path: string;
   name: string;
-  category: 'core' | 'ai' | 'engine' | 'jobs' | 'ui' | 'utils' | 'docs';
+  category: 'core' | 'ai' | 'engine' | 'jobs' | 'ui' | 'utils' | 'docs' | 'hardware' | 'benchmark';
   content: string;
 }

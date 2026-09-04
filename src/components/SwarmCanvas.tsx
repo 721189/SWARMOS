@@ -133,15 +133,40 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
       }
     });
 
+    // 4.5. Draw Task Precedence DAG Arrows (CBBA-PR)
+    tasks.forEach((task) => {
+      if (task.prerequisites && task.prerequisites.length > 0) {
+        task.prerequisites.forEach((prereqId) => {
+          const prereqTask = tasks.find((t) => t.id === prereqId);
+          if (prereqTask) {
+            const isPrereqDone = prereqTask.status === 'COMPLETED';
+            ctx.strokeStyle = isPrereqDone ? 'rgba(74, 222, 128, 0.4)' : 'rgba(245, 158, 11, 0.6)';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(prereqTask.position[0], prereqTask.position[1]);
+            ctx.lineTo(task.position[0], task.position[1]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+        });
+      }
+    });
+
     // 5. Draw Tasks
     tasks.forEach((task) => {
       const [tx, ty] = task.position;
       const isSelected = selectedTaskId === task.id;
+      const hasUnmetPrereqs = task.prerequisites && task.prerequisites.some((pid) => {
+        const pt = tasks.find((t) => t.id === pid);
+        return !pt || pt.status !== 'COMPLETED';
+      });
 
       // Color based on status
       let color = '#94a3b8'; // gray unassigned
       if (task.status === 'COMPLETED') color = '#22c55e'; // emerald
       else if (task.status === 'IN_PROGRESS') color = '#facc15'; // yellow
+      else if (hasUnmetPrereqs) color = '#f59e0b'; // amber lock
       else if (task.status === 'ASSIGNED') color = '#38bdf8'; // sky
 
       // Highlight circle if selected
@@ -180,8 +205,12 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
       ctx.font = 'bold 11px monospace';
       ctx.fillText(`${task.id}:${task.type}`, tx + 18, ty - 2);
 
-      // Assigned Drone
-      if (task.assignedAgentId) {
+      // Assigned Drone or Prerequisite status
+      if (hasUnmetPrereqs && task.status !== 'COMPLETED') {
+        ctx.fillStyle = '#fbbf24';
+        ctx.font = '9px monospace';
+        ctx.fillText(`🔒 REQ: ${task.prerequisites?.join(', ')}`, tx + 18, ty + 12);
+      } else if (task.assignedAgentId) {
         ctx.fillStyle = '#38bdf8';
         ctx.font = '10px monospace';
         ctx.fillText(`→ ${task.assignedAgentId}`, tx + 18, ty + 12);

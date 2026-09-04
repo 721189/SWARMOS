@@ -5,7 +5,9 @@ import {
   ObstacleEntity, 
   ThreatZoneEntity, 
   TelemetryKpis, 
-  ExplainTaskData 
+  ExplainTaskData,
+  MavlinkPacket,
+  BlackBoxSnapshot
 } from '../types';
 
 export function useSwarmSimulation() {
@@ -16,6 +18,10 @@ export function useSwarmSimulation() {
   const [explainData, setExplainData] = useState<ExplainTaskData | null>(null);
   const [isExplainOpen, setIsExplainOpen] = useState<boolean>(false);
   const [eventLogs, setEventLogs] = useState<string[]>([]);
+  const [mavlinkPackets, setMavlinkPackets] = useState<MavlinkPacket[]>([]);
+  const [blackBoxSnapshots, setBlackBoxSnapshots] = useState<BlackBoxSnapshot[]>([]);
+  const [activeScrubbedSnapshot, setActiveScrubbedSnapshot] = useState<BlackBoxSnapshot | null>(null);
+  const tickRef = useRef<number>(0);
 
   // Initial Agents
   const initialAgents: AgentEntity[] = [
@@ -172,6 +178,7 @@ export function useSwarmSimulation() {
       assignedAgentId: null,
       progress: 0,
       description: 'Deploy electronic countermeasure to suppress radar node',
+      prerequisites: ['T1'],
     },
     {
       id: 'T4',
@@ -196,6 +203,7 @@ export function useSwarmSimulation() {
       assignedAgentId: null,
       progress: 0,
       description: 'Bridge high-bandwidth RF mesh across mountain ridge',
+      prerequisites: ['T3'],
     },
     {
       id: 'T6',
@@ -224,6 +232,10 @@ export function useSwarmSimulation() {
 
   const [agents, setAgents] = useState<AgentEntity[]>(initialAgents);
   const [tasks, setTasks] = useState<TaskEntity[]>(initialTasks);
+  const tasksRef = useRef<TaskEntity[]>(initialTasks);
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
   const [obstacles, setObstacles] = useState<ObstacleEntity[]>(initialObstacles);
   const [threatZones, setThreatZones] = useState<ThreatZoneEntity[]>(initialThreats);
   const [commLinks, setCommLinks] = useState<[string, string][]>([]);
@@ -297,15 +309,23 @@ export function useSwarmSimulation() {
       }
     }
 
-    // Update targets for agents
+    // Update targets for agents respecting CBBA-PR DAG prerequisites
     for (const agent of updatedAgents) {
       if (agent.path.length > 0 && !agent.currentTaskId) {
-        const nextTaskId = agent.path[0];
-        const nextTask = updatedTasks.find((t) => t.id === nextTaskId);
-        if (nextTask && nextTask.status !== 'COMPLETED') {
-          agent.currentTaskId = nextTaskId;
-          agent.targetPosition = nextTask.position;
-          agent.status = 'TRAVERSING';
+        for (const candidateId of agent.path) {
+          const candidate = updatedTasks.find((t) => t.id === candidateId);
+          if (candidate && candidate.status !== 'COMPLETED') {
+            const prereqsMet = !candidate.prerequisites || candidate.prerequisites.every((prereqId) => {
+              const pTask = updatedTasks.find((pt) => pt.id === prereqId);
+              return pTask && pTask.status === 'COMPLETED';
+            });
+            if (prereqsMet) {
+              agent.currentTaskId = candidateId;
+              agent.targetPosition = candidate.position;
+              agent.status = 'TRAVERSING';
+              break;
+            }
+          }
         }
       }
     }
@@ -435,6 +455,20 @@ export function useSwarmSimulation() {
                 assigned.targetPosition = null;
                 assigned.status = 'IDLE';
 
+                // Look for next task in path whose prerequisites are met
+                for (const nextId of assigned.path) {
+                  const nt = prevTasks.find((t) => t.id === nextId);
+                  if (nt && nt.status !== 'COMPLETED') {
+                    const prereqsMet = !nt.prerequisites || nt.prerequisites.every((pid) => pid === task.id || prevTasks.find((pt) => pt.id === pid)?.status === 'COMPLETED');
+                    if (prereqsMet) {
+                      assigned.currentTaskId = nextId;
+                      assigned.targetPosition = nt.position;
+                      assigned.status = 'TRAVERSING';
+                      break;
+                    }
+                  }
+                }
+
                 return { ...task, progress: 1, status: 'COMPLETED' };
               }
               return { ...task, progress: newProgress, status: 'IN_PROGRESS' };
@@ -442,6 +476,51 @@ export function useSwarmSimulation() {
             return task;
           });
         });
+
+        // Advance simulation tick
+        tickRef.current++;
+
+        // Periodic Black Box Snapshot
+        if (tickRef.current % 10 === 0) {
+          setBlackBoxSnapshots((prev) => {
+            const snap: BlackBoxSnapshot = {
+              timestamp: Date.now(),
+              tick: tickRef.current,
+              agents: JSON.parse(JSON.stringify(nextAgents)),
+              tasks: JSON.parse(JSON.stringify(tasksRef.current)),
+              commLinks: [...commLinks],
+              event: null,
+            };
+            return [...prev, snap].slice(-120);
+          });
+        }
+
+        // Periodic MAVLink Telemetry Generator
+        if (tickRef.current % 4 === 0) {
+          const movingAgent = nextAgents.find((a) => a.status === 'TRAVERSING' || a.status === 'EXECUTING') || nextAgents[0];
+          if (movingAgent) {
+            const pkt: MavlinkPacket = {
+              timestamp: new Date().toISOString().substring(11, 23),
+              agentId: movingAgent.id,
+              msgType: movingAgent.status === 'EXECUTING' 
+                ? 'STATUSTEXT'
+                : 'SET_POSITION_TARGET_LOCAL_NED',
+              seq: tickRef.current,
+              payload: movingAgent.status === 'EXECUTING'
+                ? { severity: 6, text: `Executing payload for task ${movingAgent.currentTaskId}` }
+                : {
+                    x: Math.round(movingAgent.position[0]),
+                    y: Math.round(movingAgent.position[1]),
+                    z: -15.0,
+                    vx: Math.round((Math.random() * 2 - 1) * 10) / 10,
+                    vy: Math.round((Math.random() * 2 - 1) * 10) / 10,
+                    vz: 0.0,
+                    yaw: Math.round(Math.random() * 360),
+                  },
+            };
+            setMavlinkPackets((prev) => [pkt, ...prev].slice(0, 35));
+          }
+        }
 
         return nextAgents;
       });
@@ -656,11 +735,11 @@ export function useSwarmSimulation() {
   };
 
   return {
-    agents,
-    tasks,
+    agents: activeScrubbedSnapshot ? activeScrubbedSnapshot.agents : agents,
+    tasks: activeScrubbedSnapshot ? activeScrubbedSnapshot.tasks : tasks,
     obstacles,
     threatZones,
-    commLinks,
+    commLinks: activeScrubbedSnapshot ? activeScrubbedSnapshot.commLinks : commLinks,
     kpis,
     isRunning,
     simSpeed,
@@ -669,6 +748,9 @@ export function useSwarmSimulation() {
     explainData,
     isExplainOpen,
     eventLogs,
+    mavlinkPackets,
+    blackBoxSnapshots,
+    activeScrubbedSnapshot,
     setSelectedAgentId,
     setSelectedTaskId,
     setIsRunning,
@@ -681,5 +763,6 @@ export function useSwarmSimulation() {
     loadPresetMission,
     resetSimulation,
     generateExplainData,
+    scrubToSnapshot: setActiveScrubbedSnapshot,
   };
 }
