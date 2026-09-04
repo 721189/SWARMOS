@@ -1,11 +1,13 @@
-# SWARMOS: Decentralized Multi-Agent Swarm Operating System
+# SWARMOS: Strategic Multi-Domain Autonomous Swarm Operating System
 
-> **Vibe-Coded Autonomous Swarm Intelligence**: Dynamic Consensus-Based Bundle Algorithm (CBBA), NVIDIA Nemotron Natural Language Mission Ingestion, Real-Time Failure Resilience, and Nebius Cloud Compute Matrix.
+> **Enterprise-Grade Decentralized Multi-Agent Swarm Intelligence**: Dynamic Consensus-Based Bundle Algorithm (CBBA), MUM-T Heterogeneous Fleet Coordination (Air + Ground + Surface), Zero-Trust Tactical SDR MANET, Byzantine Fault-Tolerant PNT Defense, ATAK/WinTAK Cursor-on-Target Gateway, and NVIDIA Jetson Orin Edge SLMs.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![CBBA Protocol](https://img.shields.io/badge/consensus-CBBA--Choi09-emerald.svg)](https://ieeexplore.ieee.org/document/5072249)
-[![NVIDIA Nemotron](https://img.shields.io/badge/AI-NVIDIA%20Nemotron--4--340B-76B900.svg)](https://build.nvidia.com)
-[![Nebius AI Studio](https://img.shields.io/badge/compute-Nebius%20AI%20Studio-purple.svg)](https://nebius.ai)
+[![CBBA-BFT Protocol](https://img.shields.io/badge/consensus-CBBA--BFT%20v2.4-emerald.svg)](https://ieeexplore.ieee.org/document/5072249)
+[![DoD Standards](https://img.shields.io/badge/standard-MIL--STD--2525D%20%7C%20CoT-red.svg)](https://www.mitre.org)
+[![NVIDIA Edge](https://img.shields.io/badge/edge-Jetson%20Orin%20TensorRT--LLM-76B900.svg)](https://build.nvidia.com)
+[![Crypto](https://img.shields.io/badge/crypto-ChaCha20%20%7C%20Kyber--768-purple.svg)](https://csrc.nist.gov)
+[![Nebius AI Studio](https://img.shields.io/badge/compute-Nebius%20AI%20Studio-orange.svg)](https://nebius.ai)
 
 ---
 
