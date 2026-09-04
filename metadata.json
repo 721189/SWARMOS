@@ -1,6 +1,6 @@
 {
   "name": "SWARMOS Project Bootstrapper",
-  "description": "Strategic autonomous swarm intelligence OS featuring MUM-T heterogeneous fleet coordination (Air/Ground/Surface), role-based capability CBBA, zero-trust SDR MANET networking, on-drone Jetson Orin TensorRT-LLM replanning, ATAK/WinTAK Cursor-on-Target gateway, and Byzantine BFT PNT defense.",
+  "description": "Strategic autonomous swarm intelligence OS featuring MUM-T heterogeneous fleet coordination, 6-DOF Dubins flight dynamics, Choi et al. (2009) CBBA consensus debugger, 3D DEM knife-edge diffraction aerial relays, adversarial red-team sandbox, zero-trust SDR MANET, ATAK CoT gateway, and Byzantine BFT defense.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

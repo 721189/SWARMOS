@@ -90,6 +90,12 @@ export interface AgentEntity {
   breadcrumbs: [number, number][];
   messagesSent: number;
   distanceTraveled: number;
+  // Kinematics & Dubins modeling
+  turnRadiusM?: number;
+  bankAngleDeg?: number;
+  crabAngleDeg?: number;
+  powerDrawWatts?: number;
+  groundSpeedMps?: number;
 }
 
 export interface ObstacleEntity {
@@ -221,4 +227,103 @@ export interface EdgeLlmState {
   lastEdgePlan: string;
   lastEdgePrompt: string;
   isInferring: boolean;
+}
+
+// --- Kinematics, Dubins Flight Dynamics & Atmospheric Modeling ---
+export interface WindVector {
+  speedMps: number;       // e.g. 0 to 30 m/s
+  directionDeg: number;   // 0-360 degrees (meteorological origin)
+  turbulencePct: number;  // 0-100% stochastic gusting
+}
+
+export interface DubinsKinematics {
+  minTurnRadiusM: number;
+  currentAirspeedMps: number;
+  groundSpeedMps: number;
+  bankAngleDeg: number;
+  crabAngleDeg: number;
+  rollRateDegS: number;
+  maxBankAngleDeg: number;
+  powerDrawWatts: number;
+}
+
+// --- CBBA Consensus Step-Debugger & Choi 2009 Rule Matrix ---
+export type ChoiAction = 'UPDATE' | 'LEAVE' | 'RESET';
+
+export interface ChoiRuleLog {
+  id: string;
+  timestampMs: number;
+  receiverId: string;
+  senderId: string;
+  taskId: string;
+  senderWinner: string | null;
+  receiverWinner: string | null;
+  senderBid: number;
+  receiverBid: number;
+  senderTimestamp: number;
+  receiverTimestamp: number;
+  ruleNumber: number;      // Rule 1..18 from Choi et al. 2009 Table 1/2
+  action: ChoiAction;
+  explanation: string;
+}
+
+export interface CbbaStepState {
+  isStepMode: boolean;
+  currentIteration: number;
+  currentPhase: 'PHASE_1_BUNDLE' | 'PHASE_2_CONSENSUS' | 'CONVERGED';
+  packetDropRatePct: number;
+  droppedPacketsCount: number;
+  yMatrix: Record<string, Record<string, number>>;         // agentId -> taskId -> bid
+  zMatrix: Record<string, Record<string, string | null>>;   // agentId -> taskId -> winningAgentId
+  timestampMatrix: Record<string, Record<string, number>>; // agentId -> peerId -> timestamp
+  recentDecisions: ChoiRuleLog[];
+  isConverged: boolean;
+}
+
+// --- Terrain Digital Elevation & Line-of-Sight (LOS) Relay ---
+export interface TerrainRidgeEntity {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  elevationM: number;
+  roughnessFactor: number;
+}
+
+export interface RelayLinkStatus {
+  id: string;
+  sourceAgentId: string;
+  targetAgentId: string;
+  isDirectLosBlocked: boolean;
+  blockingRidgeId?: string;
+  fresnelZoneM: number;
+  relayedViaAgentId?: string;
+  snrDb: number;
+  throughputMbps: number;
+}
+
+// --- Adversarial Red-Team Sandbox & Live Mission Builder ---
+export type SandboxTool = 
+  | 'INSPECT' 
+  | 'ADD_CONVOY' 
+  | 'ADD_SAM' 
+  | 'ADD_JAMMER' 
+  | 'ADD_TASK' 
+  | 'DRAW_NO_FLY'
+  | 'SET_WIND';
+
+export interface RedTeamThreatEntity {
+  id: string;
+  name: string;
+  type: 'MOBILE_CONVOY' | 'RADAR_SAM' | 'RF_JAMMER';
+  position: [number, number];
+  radius: number;
+  waypoints?: [number, number][];
+  waypointIndex?: number;
+  speed: number;
+  headingDeg: number;
+  intensity: number;
+  active: boolean;
 }

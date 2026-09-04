@@ -1,7 +1,18 @@
 import React, { useRef, useEffect } from 'react';
-import { AgentEntity, TaskEntity, ObstacleEntity, ThreatZoneEntity, ByzantineState } from '../types';
+import { 
+  AgentEntity, 
+  TaskEntity, 
+  ObstacleEntity, 
+  ThreatZoneEntity, 
+  ByzantineState,
+  TerrainRidgeEntity,
+  RelayLinkStatus,
+  WindVector,
+  RedTeamThreatEntity,
+  SandboxTool
+} from '../types';
 import { agentCallsignMap } from '../hooks/useSwarmSimulation';
-import { Radio, Compass, Eye, ShieldAlert, Layers, BatteryCharging } from 'lucide-react';
+import { Radio, Compass, Eye, ShieldAlert, Layers, BatteryCharging, Wind, Mountain, Crosshair } from 'lucide-react';
 
 interface SwarmCanvasProps {
   agents: AgentEntity[];
@@ -12,6 +23,11 @@ interface SwarmCanvasProps {
   selectedAgentId: string | null;
   selectedTaskId: string | null;
   byzantineState?: ByzantineState;
+  terrainRidges?: TerrainRidgeEntity[];
+  relayLinks?: RelayLinkStatus[];
+  windVector?: WindVector;
+  redTeamThreats?: RedTeamThreatEntity[];
+  activeSandboxTool?: SandboxTool;
   tacticalMode?: {
     showMilStdSymbology: boolean;
     showUwbRangingMesh: boolean;
@@ -20,6 +36,7 @@ interface SwarmCanvasProps {
   onToggleTacticalMode?: (key: 'showMilStdSymbology' | 'showUwbRangingMesh' | 'showCotCallsigns') => void;
   onSelectAgent: (id: string | null) => void;
   onSelectTask: (id: string | null) => void;
+  onCanvasClickWithTool?: (pos: [number, number], tool: SandboxTool) => void;
 }
 
 export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
@@ -31,10 +48,16 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
   selectedAgentId,
   selectedTaskId,
   byzantineState,
+  terrainRidges = [],
+  relayLinks = [],
+  windVector,
+  redTeamThreats = [],
+  activeSandboxTool = 'INSPECT',
   tacticalMode = { showMilStdSymbology: false, showUwbRangingMesh: false, showCotCallsigns: true },
   onToggleTacticalMode,
   onSelectAgent,
   onSelectTask,
+  onCanvasClickWithTool,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -91,6 +114,36 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
       ctx.fillText(`${obs.id} [${obs.type}]`, obs.x + 6, obs.y + 16);
     });
 
+    // 2b. Draw Terrain Elevation Ridges (3D DEM)
+    terrainRidges.forEach((ridge) => {
+      const grad = ctx.createLinearGradient(ridge.x, ridge.y, ridge.x + ridge.width, ridge.y + ridge.height);
+      grad.addColorStop(0, 'rgba(180, 83, 9, 0.28)');
+      grad.addColorStop(1, 'rgba(120, 53, 15, 0.45)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(ridge.x, ridge.y, ridge.width, ridge.height);
+
+      ctx.strokeStyle = '#d97706';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(ridge.x, ridge.y, ridge.width, ridge.height);
+
+      // Hatched topographic slope lines
+      ctx.strokeStyle = 'rgba(217, 119, 6, 0.35)';
+      ctx.lineWidth = 1;
+      for (let i = 12; i < ridge.height; i += 18) {
+        ctx.beginPath();
+        ctx.moveTo(ridge.x, ridge.y + i);
+        ctx.lineTo(ridge.x + ridge.width, ridge.y + i - 6);
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = '#fef3c7';
+      ctx.font = 'bold 9px monospace';
+      ctx.fillText(`▲ ${ridge.name.toUpperCase()}`, ridge.x + 6, ridge.y + 14);
+      ctx.fillStyle = '#f59e0b';
+      ctx.font = '8px monospace';
+      ctx.fillText(`${ridge.elevationM}m MSL • RF SHADOW`, ridge.x + 6, ridge.y + 26);
+    });
+
     // 3. Draw Threat Zones
     threatZones.forEach((threat) => {
       const [cx, cy] = threat.center;
@@ -119,6 +172,86 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
       ctx.fillStyle = threat.type === 'RF_JAMMER' ? '#d8b4fe' : '#fca5a5';
       ctx.font = 'bold 10px monospace';
       ctx.fillText(`${threat.id} [${threat.type}]`, cx - 35, cy - threat.radius - 6);
+    });
+
+    // 3b. Draw Red-Team Threats (Dynamic Hostile Convoys & SAM Radars)
+    redTeamThreats.forEach((th) => {
+      if (!th.active) return;
+      const [tx, ty] = th.position;
+
+      if (th.type === 'MOBILE_CONVOY') {
+        // Waypoint breadcrumb track
+        if (th.waypoints && th.waypoints.length > 1) {
+          ctx.strokeStyle = 'rgba(244, 63, 94, 0.35)';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.moveTo(th.waypoints[0][0], th.waypoints[0][1]);
+          for (let i = 1; i < th.waypoints.length; i++) {
+            ctx.lineTo(th.waypoints[i][0], th.waypoints[i][1]);
+          }
+          ctx.closePath();
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+
+        // Diamond Hostile OPFOR Marker
+        ctx.save();
+        ctx.translate(tx, ty);
+        ctx.rotate(((th.headingDeg || 0) * Math.PI) / 180);
+
+        ctx.fillStyle = '#e11d48';
+        ctx.strokeStyle = '#fda4af';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(0, -10);
+        ctx.lineTo(8, 0);
+        ctx.lineTo(0, 10);
+        ctx.lineTo(-8, 0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, -8);
+        ctx.lineTo(0, -16);
+        ctx.stroke();
+
+        ctx.restore();
+
+        ctx.fillStyle = '#fda4af';
+        ctx.font = 'bold 9px monospace';
+        ctx.fillText(`OPFOR: ${th.name}`, tx - 32, ty - 14);
+        ctx.fillStyle = '#f43f5e';
+        ctx.font = '8px monospace';
+        ctx.fillText(`SPD: ${th.speed} kts • HDG: ${th.headingDeg}°`, tx - 32, ty + 20);
+      } else {
+        // SAM Battery Dome
+        const pulse = 1 + 0.12 * Math.sin(Date.now() / 300);
+        ctx.strokeStyle = 'rgba(239, 68, 68, 0.65)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.arc(tx, ty, th.radius * pulse, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.12)';
+        ctx.beginPath();
+        ctx.arc(tx, ty, th.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.arc(tx, ty, 6, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#fca5a5';
+        ctx.font = 'bold 9px monospace';
+        ctx.fillText(`SAM DOME: ${th.name}`, tx - 35, ty - 10);
+      }
     });
 
     // 4. Draw Mesh / UWB Links / Directional Beamforming
@@ -169,6 +302,49 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
         ctx.moveTo(a1.position[0], a1.position[1]);
         ctx.lineTo(a2.position[0], a2.position[1]);
         ctx.stroke();
+      }
+    });
+
+    // 4b. Draw 3D Terrain Occlusions & Autonomous Airborne Relay Links
+    relayLinks.forEach((rl) => {
+      const a1 = agents.find((a) => a.id === rl.agentAId);
+      const a2 = agents.find((a) => a.id === rl.agentBId);
+      if (!a1 || !a2) return;
+
+      if (rl.status === 'OCCLUDED') {
+        // Red dashed line with blocked marker
+        ctx.strokeStyle = 'rgba(239, 68, 68, 0.85)';
+        ctx.lineWidth = 1.8;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        ctx.moveTo(a1.position[0], a1.position[1]);
+        ctx.lineTo(a2.position[0], a2.position[1]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        const midX = (a1.position[0] + a2.position[0]) / 2;
+        const midY = (a1.position[1] + a2.position[1]) / 2;
+        ctx.fillStyle = '#ef4444';
+        ctx.font = 'bold 8px monospace';
+        ctx.fillText(`❌ LOS BLOCKED (${rl.occludingRidgeId || 'DEM'})`, midX - 45, midY - 6);
+      } else if (rl.status === 'RELAYED' && rl.relayAgentId) {
+        // Cyan double line through relay
+        const relayAgent = agents.find((a) => a.id === rl.relayAgentId);
+        if (relayAgent) {
+          ctx.strokeStyle = 'rgba(6, 182, 212, 0.8)';
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          ctx.moveTo(a1.position[0], a1.position[1]);
+          ctx.lineTo(relayAgent.position[0], relayAgent.position[1]);
+          ctx.lineTo(a2.position[0], a2.position[1]);
+          ctx.stroke();
+
+          const rX = relayAgent.position[0];
+          const rY = relayAgent.position[1];
+          ctx.fillStyle = '#22d3ee';
+          ctx.font = 'bold 8px monospace';
+          ctx.fillText('⚡ AIR RELAY (+21dB SNR)', rX - 35, rY - 26);
+        }
       }
     });
 
@@ -450,8 +626,67 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
         : isQuarantined ? '#ef4444' : isFailed ? '#ef4444' : isJammed ? '#c084fc' : '#38bdf8';
       ctx.font = '8px monospace';
       ctx.fillText(agent.status, ax - 16, ay + 24);
+
+      // Dubins & Kinematic flight telemetry
+      if (agent.domain === 'AIR_FIXED_WING') {
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = '8px monospace';
+        ctx.fillText(`BANK: ${agent.bankAngleDeg || 0}° | ${(agent.groundSpeedMps || agent.speed).toFixed(1)} m/s`, ax - 30, ay + 34);
+        if (agent.powerDrawWatts) {
+          ctx.fillStyle = '#94a3b8';
+          ctx.fillText(`PWR: ${Math.round(agent.powerDrawWatts)}W`, ax - 30, ay + 44);
+        }
+      }
     });
-  }, [agents, tasks, obstacles, threatZones, commLinks, selectedAgentId, selectedTaskId, byzantineState, tacticalMode]);
+
+    // 7. Tactical METOC Wind Compass HUD
+    if (windVector) {
+      const hudX = width - 65;
+      const hudY = 55;
+      const r = 22;
+
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(hudX, hudY, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#ef4444';
+      ctx.font = 'bold 8px monospace';
+      ctx.fillText('N', hudX - 3, hudY - r + 8);
+
+      ctx.save();
+      ctx.translate(hudX, hudY);
+      const windRad = (windVector.directionDeg * Math.PI) / 180;
+      ctx.rotate(windRad);
+
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, r - 6);
+      ctx.lineTo(0, -r + 8);
+      ctx.stroke();
+
+      ctx.fillStyle = '#38bdf8';
+      ctx.beginPath();
+      ctx.moveTo(0, r - 4);
+      ctx.lineTo(-3.5, r - 10);
+      ctx.lineTo(3.5, r - 10);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.restore();
+
+      ctx.fillStyle = '#e2e8f0';
+      ctx.font = 'bold 9px monospace';
+      ctx.fillText(`${windVector.speedMps} m/s`, hudX - 16, hudY + r + 13);
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '7px monospace';
+      ctx.fillText(`${windVector.directionDeg}° • T:${windVector.turbulencePct}%`, hudX - 22, hudY + r + 23);
+    }
+  }, [agents, tasks, obstacles, threatZones, commLinks, selectedAgentId, selectedTaskId, byzantineState, tacticalMode, terrainRidges, relayLinks, windVector, redTeamThreats]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -461,6 +696,11 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
     const scaleY = canvas.height / rect.height;
     const clickX = (e.clientX - rect.left) * scaleX;
     const clickY = (e.clientY - rect.top) * scaleY;
+
+    if (activeSandboxTool && activeSandboxTool !== 'INSPECT' && onCanvasClickWithTool) {
+      onCanvasClickWithTool([clickX, clickY], activeSandboxTool);
+      return;
+    }
 
     for (const agent of agents) {
       const d = Math.hypot(agent.position[0] - clickX, agent.position[1] - clickY);
@@ -560,6 +800,12 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
           </span>
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-indigo-500" /> Surface USV
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-amber-700" /> Ridge DEM
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-rose-500" /> OPFOR Hostile
           </span>
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-purple-500" /> Jammer

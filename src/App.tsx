@@ -17,7 +17,10 @@ import {
   Sparkles,
   Satellite,
   Lock,
-  Boxes
+  Boxes,
+  Binary,
+  Mountain,
+  Crosshair
 } from 'lucide-react';
 import { useSwarmSimulation } from './hooks/useSwarmSimulation';
 import { SwarmCanvas } from './components/SwarmCanvas';
@@ -33,9 +36,15 @@ import { AtakCotGateway } from './components/AtakCotGateway';
 import { ByzantineDefensePanel } from './components/ByzantineDefensePanel';
 import { HeterogeneousFleetPanel } from './components/HeterogeneousFleetPanel';
 import { SdrMeshPanel } from './components/SdrMeshPanel';
+import { CbbaDebuggerPanel } from './components/CbbaDebuggerPanel';
+import { TerrainRelayPanel } from './components/TerrainRelayPanel';
+import { RedTeamSandboxPanel } from './components/RedTeamSandboxPanel';
 
 type NavTab = 
   | 'simulation' 
+  | 'cbba-debugger'
+  | 'terrain-relay'
+  | 'red-team'
   | 'mumt'
   | 'sdrmesh'
   | 'atak' 
@@ -73,6 +82,13 @@ export default function App() {
     takServerStatus,
     sdrMeshState,
     edgeLlmState,
+    windVector,
+    terrainRidges,
+    isAutonomousRelayActive,
+    relayLinks,
+    cbbaStepState,
+    redTeamThreats,
+    activeSandboxTool,
     setSelectedAgentId,
     setSelectedTaskId,
     setIsRunning,
@@ -93,6 +109,17 @@ export default function App() {
     setSdrRadioModel,
     toggleSdrCryptoSuite,
     triggerEdgeLlmInference,
+    updateWindVector,
+    toggleAutonomousRelay,
+    toggleStepMode,
+    setPacketDropRate,
+    resetAuctionStepDebugger,
+    stepAuctionIteration,
+    addThreat,
+    removeThreat,
+    toggleThreat,
+    addCustomTask,
+    setActiveSandboxTool,
   } = useSwarmSimulation();
 
   const handleToggleTacticalMode = (key: 'showMilStdSymbology' | 'showUwbRangingMesh' | 'showCotCallsigns') => {
@@ -147,6 +174,45 @@ export default function App() {
             >
               <Activity className="w-3.5 h-3.5" />
               <span>Workbench</span>
+            </button>
+
+            <button
+              id="nav-tab-cbba"
+              onClick={() => setActiveTab('cbba-debugger')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all whitespace-nowrap ${
+                activeTab === 'cbba-debugger'
+                  ? 'bg-sky-500 text-slate-950 font-bold shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              }`}
+            >
+              <Binary className="w-3.5 h-3.5 text-cyan-400" />
+              <span>CBBA Debugger</span>
+            </button>
+
+            <button
+              id="nav-tab-terrain"
+              onClick={() => setActiveTab('terrain-relay')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all whitespace-nowrap ${
+                activeTab === 'terrain-relay'
+                  ? 'bg-sky-500 text-slate-950 font-bold shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              }`}
+            >
+              <Mountain className="w-3.5 h-3.5 text-amber-400" />
+              <span>Terrain &amp; Relay</span>
+            </button>
+
+            <button
+              id="nav-tab-redteam"
+              onClick={() => setActiveTab('red-team')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all whitespace-nowrap ${
+                activeTab === 'red-team'
+                  ? 'bg-sky-500 text-slate-950 font-bold shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              }`}
+            >
+              <Crosshair className="w-3.5 h-3.5 text-rose-400" />
+              <span>Red-Team Sandbox</span>
             </button>
 
             <button
@@ -286,12 +352,46 @@ export default function App() {
                   selectedAgentId={selectedAgentId}
                   selectedTaskId={selectedTaskId}
                   byzantineState={byzantineState}
+                  terrainRidges={terrainRidges}
+                  relayLinks={relayLinks}
+                  windVector={windVector}
+                  redTeamThreats={redTeamThreats}
+                  activeSandboxTool={activeSandboxTool}
                   tacticalMode={tacticalMode}
                   onToggleTacticalMode={handleToggleTacticalMode}
                   onSelectAgent={setSelectedAgentId}
                   onSelectTask={(taskId) => {
                     setSelectedTaskId(taskId);
                     if (taskId) generateExplainData(taskId);
+                  }}
+                  onCanvasClickWithTool={(pos, tool) => {
+                    if (tool === 'ADD_SAM') {
+                      injectSAM(pos[0], pos[1]);
+                    } else if (tool === 'ADD_JAMMER') {
+                      injectJammer(pos[0], pos[1]);
+                    } else if (tool === 'ADD_CONVOY') {
+                      addThreat({
+                        name: `OPFOR-CONVOY-${Math.floor(Math.random() * 900 + 100)}`,
+                        type: 'MOBILE_CONVOY',
+                        position: pos,
+                        radius: 40,
+                        waypoints: [pos, [pos[0] + 120, pos[1]], [pos[0] + 120, pos[1] + 100], [pos[0], pos[1] + 100]],
+                        waypointIndex: 0,
+                        speed: 14,
+                        headingDeg: 90,
+                        intensity: 0.85,
+                        active: true,
+                      });
+                    } else if (tool === 'ADD_TASK') {
+                      addCustomTask({
+                        position: pos,
+                        type: 'SURVEIL',
+                        reward: 95,
+                        priority: 1,
+                        description: `Tactical reconnaissance point (${Math.round(pos[0])}, ${Math.round(pos[1])})`,
+                        requiredPayload: 'FLIR_THERMAL',
+                      });
+                    }
                   }}
                 />
               </div>
@@ -325,6 +425,52 @@ export default function App() {
               kpis={kpis}
               agents={agents}
               eventLogs={eventLogs}
+            />
+          </div>
+        )}
+
+        {/* Tab: CBBA Step Debugger & Choi 2009 Rule Inspector */}
+        {activeTab === 'cbba-debugger' && (
+          <div className="animate-in fade-in duration-150">
+            <CbbaDebuggerPanel
+              agents={agents}
+              tasks={tasks}
+              cbbaStepState={cbbaStepState}
+              onToggleStepMode={toggleStepMode}
+              onStepAuction={stepAuctionIteration}
+              onResetAuction={resetAuctionStepDebugger}
+              onSetDropRate={setPacketDropRate}
+            />
+          </div>
+        )}
+
+        {/* Tab: Terrain Elevation & 3D LOS Relay Manager */}
+        {activeTab === 'terrain-relay' && (
+          <div className="animate-in fade-in duration-150">
+            <TerrainRelayPanel
+              ridges={terrainRidges}
+              relayLinks={relayLinks}
+              agents={agents}
+              isAutonomousRelayActive={isAutonomousRelayActive}
+              onToggleAutonomousRelay={toggleAutonomousRelay}
+              frequencyMhz={sdrMeshState.frequencyMhz}
+            />
+          </div>
+        )}
+
+        {/* Tab: Red-Team Adversarial Sandbox & Mission Builder */}
+        {activeTab === 'red-team' && (
+          <div className="animate-in fade-in duration-150">
+            <RedTeamSandboxPanel
+              activeTool={activeSandboxTool}
+              onSelectTool={setActiveSandboxTool}
+              windVector={windVector}
+              onUpdateWind={updateWindVector}
+              redTeamThreats={redTeamThreats}
+              onAddThreat={addThreat}
+              onRemoveThreat={removeThreat}
+              onToggleThreat={toggleThreat}
+              onAddCustomTask={addCustomTask}
             />
           </div>
         )}

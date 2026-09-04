@@ -204,6 +204,75 @@ SWARMOS interfaces with tactical command architectures through strict compliance
 
 ---
 
+### Pillar VI: High-Fidelity 6-DOF Dubins Kinematics & Aerodynamic Power Derating
+
+Real fixed-wing and multirotor platforms are bound by physical flight dynamics and non-holonomic constraints:
+
+1. **Non-Holonomic Coordinated Turn Dynamics**:
+   Fixed-wing scouts cannot make instantaneous directional angle changes. SWARMOS computes minimum turn radii based on maximum bank angle $\phi_{\max}$:
+   $$R_{\min} = \frac{v^2}{g \cdot \tan(\phi_{\max})}$$
+   Where $g = 9.80665\text{ m/s}^2$ and $\phi_{\max} = 35^\circ$ for VIPER-01.
+
+2. **METOC Wind Vector Correction (Wind Triangle)**:
+   In the presence of atmospheric wind vector $\vec{W} = (W_x, W_y)$, ground speed $\vec{V}_g$ and crab angle $\psi_{\text{crab}}$ are calculated continuously:
+   $$\vec{V}_g = \vec{V}_a + \vec{W}, \quad \psi_{\text{crab}} = \arcsin\left(\frac{|\vec{W}| \cdot \sin(\theta - \psi_w)}{|\vec{V}_a|}\right)$$
+
+3. **Aerodynamic Drag & Power Draw (Watts)**:
+   Battery drain is governed by true aerodynamic power curves rather than linear timers:
+   $$P_{\text{total}} = P_{\text{avionics}} + \frac{1}{2} \rho v_{\text{TAS}}^3 S C_{D0} + \frac{2 k W_{\text{mass}}^2 g^2}{\rho v_{\text{TAS}} S}$$
+   Platforms flying into head-winds automatically experience increased induced drag and power consumption, triggering timely loiter-repositioning or UGV docking.
+
+---
+
+### Pillar VII: Deterministic Choi et al. (2009) CBBA 18-Rule Step-Debugger
+
+To eliminate black-box non-determinism during tactical certifications, SWARMOS embeds an interactive, step-by-step inspector for the **Choi et al. (2009) IEEE Transactions on Robotics (T-RO)** CBBA decision rules:
+
+- **18-Rule Asynchronous Conflict Resolution**:
+  Exhaustive evaluation of receiver $i$, sender $k$, and task $j$ state conditions across 3 distinct operational regimes:
+  - **Rules 1–8 (Agreement & Third-Party Convergence)**: Handling null winners, sender adoption, and timestamp freshness comparisons ($s_{km} > s_{im}$).
+  - **Rules 9–13 (Direct Bid Competition)**: Resolving head-to-head bids where sender $y_k > y_i$ prompts an `UPDATE`, and $y_i \ge y_k$ commands `LEAVE`.
+  - **Rules 14–18 (Task Vacation & Stale Outlier Reset)**: Detecting abandoned task assignments or out-of-order broadcasts and commanding deterministic `RESET`.
+- **Live Inspectable Y-Matrix & Z-Matrix**:
+  Direct UI and API visibility into the marginal bid matrix $\mathbf{Y} \in \mathbb{R}^{N \times M}$, winner assignment matrix $\mathbf{Z} \in \mathbb{N}^{N \times M}$, and timestamp vector matrix $\mathbf{S}$.
+- **Calibrated Packet-Loss Injection (0–80%)**:
+  Operators can inject stochastic packet loss to visually verify that the CBBA protocol reaches mathematically guaranteed conflict-free consensus even under extreme MANET drop conditions.
+
+---
+
+### Pillar VIII: 3D Digital Elevation Model (DEM), Fresnel Clearances & Aerial Relays
+
+Tactical radio waves cannot penetrate mountainous terrain. SWARMOS introduces 3D terrain line-of-sight analysis and automated relay orchestration:
+
+1. **Digital Elevation Model (DEM) & Knife-Edge Diffraction**:
+   Terrain ridges are parameterized with base coordinates, elevation above ground level ($h_{\text{obs}}$), and surface roughness factors. Path attenuation accounts for knife-edge diffraction:
+   $$v = h_{\text{obs}} \sqrt{\frac{2(d_1 + d_2)}{\lambda d_1 d_2}}, \quad J(v) = 6.9 + 20\log_{10}\left(\sqrt{(v-0.1)^2 + 1} + v - 0.1\right)$$
+   Links with negative clearance ($v > 0$) incur severe RF shadowing ($>20\text{ dB}$ loss) and are marked `OCCLUDED`.
+
+2. **First Fresnel Zone ($F_1$) Clearance**:
+   $$r_F = 17.32 \sqrt{\frac{d_1 d_2}{f_{\text{GHz}} \cdot (d_1 + d_2)}}$$
+   Clearance of at least $60\% r_F$ is enforced to prevent multipath phase cancellation.
+
+3. **Autonomous Airborne Relay Repositioning**:
+   When ground units or multirotor scouts become terrain-occluded from the tactical operations center, high-altitude standoff assets (**VIPER-01**) or dedicated relay nodes autonomously calculate a crest-line loiter anchor, establishing dual-hop airborne relays with $+21\text{ dB}$ SNR improvement.
+
+---
+
+### Pillar IX: Adversarial Red-Team Sandbox & Live Mission Builder
+
+SWARMOS incorporates an operator-in-the-loop adversarial mission simulation sandbox:
+
+- **Dynamic OPFOR Hostile Convoys**:
+  Inject moving enemy mechanized convoys that traverse parametric waypoint routes with directional velocity vectors and real-time radar signatures.
+- **Pop-Up Surface-to-Air Missile (SAM) Radar Domes**:
+  Place interactive radar threat exclusion zones with dynamic pulse envelopes that immediately trigger distributed path replanning and obstacle avoidance.
+- **Live Mission Objective Placement**:
+  Single-click injection of surveillance, structural scan, or heavy munition tasks onto the tactical grid with automatic constraint-satisfaction payload matching.
+- **METOC Atmospheric Controls**:
+  Real-time sliders for wind speed ($0\text{--}30\text{ m/s}$), wind direction ($0\text{--}360^\circ$), and atmospheric turbulence ($0\text{--}100\%$).
+
+---
+
 ## 4. Monorepo Structure
 
 ```
@@ -218,6 +287,9 @@ SWARMOS interfaces with tactical command architectures through strict compliance
 │   │   ├── SdrMeshPanel.tsx              # Zero-Trust SDR MANET & Jetson Orin SLM interface
 │   │   ├── ByzantineDefensePanel.tsx     # GPS-Denied CRL mesh & BFT quarantine manager
 │   │   ├── AtakCotGateway.tsx            # Live Cursor-on-Target telemetry & Mission Package export
+│   │   ├── CbbaDebuggerPanel.tsx         # Choi 2009 18-rule step-debugger & live Y/Z matrix inspector
+│   │   ├── TerrainRelayPanel.tsx         # 3D DEM ridge elevation, Fresnel zones & aerial relays
+│   │   ├── RedTeamSandboxPanel.tsx       # Interactive OPFOR convoys, SAM domes & wind vector HUD
 │   │   ├── MetricsDashboard.tsx          # Real-time KPIs, packet loss, energy consumption
 │   │   ├── ArchitectureViewer.tsx        # Interactive architectural diagrams & data flows
 │   │   ├── ScaffoldExplorer.tsx          # Monorepo code inspector & documentation
@@ -225,6 +297,10 @@ SWARMOS interfaces with tactical command architectures through strict compliance
 │   │   ├── DemoScriptViewer.tsx          # 3-minute executive video script & storyboard
 │   │   ├── TechnicalReportViewer.tsx     # Formal IEEE mathematical whitepaper
 │   │   └── ExplainModal.tsx              # X-AI marginal bid forensic inspector
+│   ├── utils/
+│   │   ├── dubinsKinematics.ts           # 6-DOF turn radius, bank angle, ground speed & power
+│   │   ├── choi2009Rules.ts              # Canonical IEEE Choi 2009 18-rule conflict resolution engine
+│   │   └── terrainLos.ts                 # 3D DEM ray-casting, Fresnel clearances & knife-edge diffraction
 │   └── hooks/
 │       └── useSwarmSimulation.ts         # High-fidelity physics, CBBA, SDR & BFT state machine
 │

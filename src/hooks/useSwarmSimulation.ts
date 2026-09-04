@@ -14,8 +14,19 @@ import {
   TakServerStatus,
   SdrMeshState,
   EdgeLlmState,
-  PayloadCapability
+  PayloadCapability,
+  WindVector,
+  DubinsKinematics,
+  ChoiRuleLog,
+  CbbaStepState,
+  TerrainRidgeEntity,
+  RelayLinkStatus,
+  SandboxTool,
+  RedTeamThreatEntity
 } from '../types';
+import { stepKinematics, calculatePowerDraw } from '../utils/dubinsKinematics';
+import { resolveChoi2009Conflict, createChoiLog } from '../utils/choi2009Rules';
+import { calculateRelayNetwork } from '../utils/rfRelayModel';
 
 export const agentCallsignMap: Record<string, string> = {
   'A1': 'VIPER-01 (Fixed-Wing)',
@@ -423,6 +434,53 @@ Domain Coordination Summary:
     lastHeartbeat: new Date().toISOString().substring(11, 19),
   });
 
+  // --- Atmospheric Wind Vector & Dubins Flight Dynamics ---
+  const [windVector, setWindVector] = useState<WindVector>({
+    speedMps: 12,
+    directionDeg: 240,
+    turbulencePct: 15,
+  });
+
+  // --- Terrain Digital Elevation Model (DEM) & LOS Relay ---
+  const [terrainRidges, setTerrainRidges] = useState<TerrainRidgeEntity[]>([
+    { id: 'RIDGE_SIERRA', name: 'Ridge Sierra', x: 340, y: 160, width: 80, height: 180, elevationM: 140, roughnessFactor: 0.8 },
+    { id: 'RIDGE_ECHO', name: 'Ridge Echo', x: 590, y: 260, width: 80, height: 160, elevationM: 110, roughnessFactor: 0.6 },
+  ]);
+  const [isAutonomousRelayActive, setIsAutonomousRelayActive] = useState<boolean>(true);
+  const [relayLinks, setRelayLinks] = useState<RelayLinkStatus[]>([]);
+
+  // --- CBBA Consensus Step-Debugger & Choi 2009 Rule State ---
+  const [cbbaStepState, setCbbaStepState] = useState<CbbaStepState>({
+    isStepMode: false,
+    currentIteration: 1,
+    currentPhase: 'CONVERGED',
+    packetDropRatePct: 0,
+    droppedPacketsCount: 0,
+    yMatrix: {},
+    zMatrix: {},
+    timestampMatrix: {},
+    recentDecisions: [],
+    isConverged: true,
+  });
+
+  // --- Adversarial Red-Team Sandbox & Live Mission Builder ---
+  const [redTeamThreats, setRedTeamThreats] = useState<RedTeamThreatEntity[]>([
+    {
+      id: 'THREAT_CONVOY_1',
+      name: 'OPFOR-CONVOY-BRAVO',
+      type: 'MOBILE_CONVOY',
+      position: [680, 160],
+      radius: 45,
+      waypoints: [[680, 160], [780, 160], [780, 320], [680, 320]],
+      waypointIndex: 0,
+      speed: 16,
+      headingDeg: 90,
+      intensity: 0.9,
+      active: true,
+    },
+  ]);
+  const [activeSandboxTool, setActiveSandboxTool] = useState<SandboxTool>('INSPECT');
+
   const [kpis, setKpis] = useState<TelemetryKpis>({
     taskCompletionPct: 0,
     completedTasks: 0,
@@ -624,6 +682,10 @@ Domain Coordination Summary:
 
     setCommLinks(links);
 
+    // Calculate 3D Terrain Line-of-Sight & Autonomous Relay network
+    const rLinks = calculateRelayNetwork(agents, terrainRidges, sdrMeshState.frequencyMhz);
+    setRelayLinks(rLinks);
+
     // Update SDR Mesh KPI
     const avgSnr = linkCount > 0 ? totalSnr / linkCount : 12.0;
     const packetLoss = avgSnr < 10 ? 12.5 : avgSnr < 18 ? 2.4 : 0.15;
@@ -635,7 +697,7 @@ Domain Coordination Summary:
       packetLossPct: Number(packetLoss.toFixed(2)),
       throughputMbps: throughput,
     }));
-  }, [agents, threatZones, sdrMeshState.frequencyMhz, sdrMeshState.txPowerDbm, sdrMeshState.beamformingGainDbi]);
+  }, [agents, threatZones, terrainRidges, sdrMeshState.frequencyMhz, sdrMeshState.txPowerDbm, sdrMeshState.beamformingGainDbi]);
 
   // Key Epoch Countdown & Anti-Replay Keystream
   useEffect(() => {
@@ -720,28 +782,39 @@ Domain Coordination Summary:
             }
           }
 
-          const speed = (agent.speed * agent.health.propulsion * simSpeed * 0.05);
           let newPos = [...agent.position] as [number, number];
           let newTarget = agent.targetPosition;
           let newStatus = agent.status;
           let heading = agent.headingDeg;
+          let bankAngle = agent.bankAngleDeg || 0;
+          let crabAngle = agent.crabAngleDeg || 0;
+          let groundSpeed = agent.groundSpeedMps || agent.speed;
 
-          // Fixed-wing continuous sweeping orbit physics vs Multirotor direct hover
+          // Fixed-wing Dubins coordinated turn physics vs Multirotor direct hover
           if (agent.domain === 'AIR_FIXED_WING' && agent.targetPosition) {
             const dx = agent.targetPosition[0] - agent.position[0];
             const dy = agent.targetPosition[1] - agent.position[1];
             const dist = Math.hypot(dx, dy);
 
             if (dist > 40) {
-              const step = Math.min(dist, speed);
-              newPos = [
-                agent.position[0] + (dx / dist) * step,
-                agent.position[1] + (dy / dist) * step,
-              ];
-              heading = Math.round((Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360);
+              const kin = stepKinematics(
+                agent.position,
+                agent.headingDeg,
+                agent.targetPosition,
+                agent.speed * agent.health.propulsion,
+                agent.turnRadiusM || 35,
+                0.05 * simSpeed,
+                true,
+                windVector
+              );
+              newPos = kin.nextPos;
+              heading = kin.nextHeadingDeg;
+              bankAngle = kin.bankAngleDeg;
+              crabAngle = kin.crabAngleDeg;
+              groundSpeed = kin.groundSpeedMps;
               newStatus = 'TRAVERSING';
             } else {
-              // Sweeping loiter orbit around target
+              // Sweeping loiter orbit around target with coordinated bank
               const orbitRadius = 45;
               const angle = (Date.now() / 2000) * (agent.speed / 50);
               newPos = [
@@ -749,29 +822,38 @@ Domain Coordination Summary:
                 agent.targetPosition[1] + Math.sin(angle) * orbitRadius,
               ];
               heading = Math.round(((angle + Math.PI / 2) * 180 / Math.PI + 360) % 360);
+              bankAngle = 22;
               newStatus = 'EXECUTING';
             }
           } else if (agent.targetPosition) {
-            const dx = agent.targetPosition[0] - agent.position[0];
-            const dy = agent.targetPosition[1] - agent.position[1];
-            const dist = Math.hypot(dx, dy);
-
+            const dist = Math.hypot(agent.targetPosition[0] - agent.position[0], agent.targetPosition[1] - agent.position[1]);
             if (dist > 4) {
-              const step = Math.min(dist, speed);
-              newPos = [
-                agent.position[0] + (dx / dist) * step,
-                agent.position[1] + (dy / dist) * step,
-              ];
-              heading = Math.round((Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360);
+              const kin = stepKinematics(
+                agent.position,
+                agent.headingDeg,
+                agent.targetPosition,
+                agent.speed * agent.health.propulsion,
+                15,
+                0.05 * simSpeed,
+                false,
+                windVector
+              );
+              newPos = kin.nextPos;
+              heading = kin.nextHeadingDeg;
+              crabAngle = kin.crabAngleDeg;
+              groundSpeed = kin.groundSpeedMps;
+              bankAngle = 0;
               newStatus = 'TRAVERSING';
             } else {
               newStatus = 'EXECUTING';
             }
           }
 
-          // Battery drain based on domain
-          const drainRate = agent.domain === 'GROUND_UGV' ? 0.005 : agent.domain === 'AIR_FIXED_WING' ? 0.012 : 0.018;
-          const newBattery = Math.max(0, agent.health.battery - drainRate * simSpeed);
+          // Aerodynamic Energy Derating in Watts
+          const powerWatts = calculatePowerDraw(agent, groundSpeed, windVector);
+          const energyUsedWh = powerWatts * (0.05 * simSpeed / 3600);
+          const batteryPctDrain = (energyUsedWh / agent.batteryCapacityWh) * 100;
+          const newBattery = Math.max(0, agent.health.battery - batteryPctDrain);
 
           // Breadcrumbs
           const newBreadcrumbs = [...agent.breadcrumbs];
@@ -785,6 +867,10 @@ Domain Coordination Summary:
             position: newPos,
             status: newStatus,
             headingDeg: heading,
+            bankAngleDeg: bankAngle,
+            crabAngleDeg: crabAngle,
+            groundSpeedMps: groundSpeed,
+            powerDrawWatts: powerWatts,
             health: { ...agent.health, battery: newBattery },
             breadcrumbs: newBreadcrumbs,
           };
@@ -830,6 +916,41 @@ Domain Coordination Summary:
         });
 
         return nextAgents;
+      });
+
+      // Advance dynamic hostile red-team convoys
+      setRedTeamThreats((prevThreats) => {
+        return prevThreats.map((threat) => {
+          if (!threat.active || threat.speed === 0 || !threat.waypoints || threat.waypoints.length === 0) {
+            return threat;
+          }
+          const currIdx = threat.waypointIndex || 0;
+          const targetWp = threat.waypoints[currIdx];
+          const dx = targetWp[0] - threat.position[0];
+          const dy = targetWp[1] - threat.position[1];
+          const dist = Math.hypot(dx, dy);
+          const step = (threat.speed * simSpeed * 0.05);
+
+          if (dist <= step || dist < 4) {
+            const nextIdx = (currIdx + 1) % threat.waypoints.length;
+            return {
+              ...threat,
+              position: targetWp,
+              waypointIndex: nextIdx,
+            };
+          } else {
+            const newPos: [number, number] = [
+              threat.position[0] + (dx / dist) * step,
+              threat.position[1] + (dy / dist) * step,
+            ];
+            const heading = Math.round((Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360);
+            return {
+              ...threat,
+              position: newPos,
+              headingDeg: heading,
+            };
+          }
+        });
       });
     }, 100);
 
@@ -914,28 +1035,28 @@ Domain Coordination Summary:
     });
   };
 
-  const injectJammer = () => {
+  const injectJammer = (x = 450, y = 280) => {
     const newJammer: ThreatZoneEntity = {
       id: `JAM_${threatZones.length + 1}`,
-      center: [450, 280],
+      center: [x, y],
       radius: 120,
       type: 'RF_JAMMER',
       intensity: 1.0,
     };
     setThreatZones((prev) => [...prev, newJammer]);
-    addLog(`THREAT INJECTED: High-power RF Electronic Warfare Jammer deployed at [450, 280].`);
+    addLog(`THREAT INJECTED: High-power RF Electronic Warfare Jammer deployed at [${Math.round(x)}, ${Math.round(y)}].`);
   };
 
-  const injectSAM = () => {
+  const injectSAM = (x = 720, y = 160) => {
     const newSAM: ThreatZoneEntity = {
       id: `SAM_${threatZones.length + 1}`,
-      center: [720, 160],
+      center: [x, y],
       radius: 90,
       type: 'RADAR_SAM',
       intensity: 1.0,
     };
     setThreatZones((prev) => [...prev, newSAM]);
-    addLog(`THREAT INJECTED: Pop-up Surface-to-Air Missile Radar Threat Zone detected at [720, 160].`);
+    addLog(`THREAT INJECTED: Pop-up Surface-to-Air Missile Radar Threat Zone detected at [${Math.round(x)}, ${Math.round(y)}].`);
   };
 
   const dockAgentToUgv = (agentId: string, ugvId: string) => {
@@ -1228,6 +1349,202 @@ ${tasks.map((t) => {
     addLog('Exported official ATAK CoT Mission Data Package (.xml).');
   };
 
+  // --- Tactical Handlers: Wind & Dubins ---
+  const updateWindVector = useCallback((partial: Partial<WindVector>) => {
+    setWindVector((prev) => {
+      const next = { ...prev, ...partial };
+      addLog(`METOC: Atmospheric wind vector adjusted to ${next.speedMps} m/s @ ${next.directionDeg}° (Turbulence: ${next.turbulencePct}%).`);
+      return next;
+    });
+  }, [addLog]);
+
+  // --- Tactical Handlers: Terrain & Relay ---
+  const toggleAutonomousRelay = useCallback(() => {
+    setIsAutonomousRelayActive((prev) => {
+      const next = !prev;
+      addLog(`RF RELAY: Autonomous Airborne/UGV Relay bridging ${next ? 'ACTIVATED' : 'DEACTIVATED'}.`);
+      return next;
+    });
+  }, [addLog]);
+
+  // --- Tactical Handlers: Choi 2009 CBBA Step Debugger ---
+  const toggleStepMode = useCallback(() => {
+    setCbbaStepState((prev) => {
+      const nextMode = !prev.isStepMode;
+      addLog(`CBBA STEP DEBUGGER: Step-by-step mode ${nextMode ? 'ENABLED (Simulation paused for deterministic Choi 2009 inspection)' : 'DISABLED (Continuous consensus resumed)'}.`);
+      return { ...prev, isStepMode: nextMode };
+    });
+  }, [addLog]);
+
+  const setPacketDropRate = useCallback((pct: number) => {
+    setCbbaStepState((prev) => ({ ...prev, packetDropRatePct: pct }));
+  }, []);
+
+  const resetAuctionStepDebugger = useCallback(() => {
+    setAgents((prev) =>
+      prev.map((a) => ({
+        ...a,
+        bundle: [],
+        path: [],
+        winningBids: {},
+        winningAgents: {},
+        currentTaskId: null,
+      }))
+    );
+    setTasks((prev) =>
+      prev.map((t) => ({
+        ...t,
+        status: 'UNASSIGNED',
+        assignedAgentId: null,
+        progress: 0,
+      }))
+    );
+    setCbbaStepState({
+      isStepMode: true,
+      currentIteration: 1,
+      currentPhase: 'PHASE_1_BUNDLE',
+      packetDropRatePct: 0,
+      droppedPacketsCount: 0,
+      yMatrix: {},
+      zMatrix: {},
+      timestampMatrix: {},
+      recentDecisions: [],
+      isConverged: false,
+    });
+    addLog('CBBA STEP DEBUGGER: Reset consensus state vectors (y, z, s) to zero for fresh execution.');
+  }, [addLog]);
+
+  const stepAuctionIteration = useCallback((phase: 'PHASE_1_BUNDLE' | 'PHASE_2_CONSENSUS') => {
+    if (phase === 'PHASE_1_BUNDLE') {
+      const res = runCBBAAuction(agents, tasksRef.current);
+      setAgents(res.updatedAgents);
+      setTasks(res.updatedTasks);
+
+      const yMat: Record<string, Record<string, number>> = {};
+      const zMat: Record<string, Record<string, string | null>> = {};
+      res.updatedAgents.forEach((a) => {
+        yMat[a.id] = { ...a.winningBids };
+        zMat[a.id] = { ...a.winningAgents };
+      });
+
+      setCbbaStepState((prev) => ({
+        ...prev,
+        currentPhase: 'PHASE_1_BUNDLE',
+        yMatrix: yMat,
+        zMatrix: zMat,
+        isConverged: false,
+      }));
+      addLog(`CBBA STEP: Phase 1 (Bundle Addition) computed for Iteration ${cbbaStepState.currentIteration}.`);
+    } else {
+      const decisions: ChoiRuleLog[] = [];
+      let droppedCount = 0;
+      let conflictCount = 0;
+
+      const updatedAgents = agents.map((a) => ({
+        ...a,
+        winningBids: { ...a.winningBids },
+        winningAgents: { ...a.winningAgents },
+      }));
+
+      commLinks.forEach(([id1, id2]) => {
+        const a1 = updatedAgents.find((a) => a.id === id1);
+        const a2 = updatedAgents.find((a) => a.id === id2);
+        if (!a1 || !a2) return;
+
+        if (Math.random() * 100 < cbbaStepState.packetDropRatePct) {
+          droppedCount++;
+          return;
+        }
+
+        tasksRef.current.forEach((t) => {
+          const z1 = a1.winningAgents[t.id] || null;
+          const y1 = a1.winningBids[t.id] || 0;
+          const z2 = a2.winningAgents[t.id] || null;
+          const y2 = a2.winningBids[t.id] || 0;
+
+          if (z1 !== z2 || y1 !== y2) {
+            conflictCount++;
+            const d1 = resolveChoi2009Conflict(a1.id, a2.id, t.id, z1, y1, z2, y2);
+            if (d1.action === 'UPDATE') {
+              a1.winningAgents[t.id] = d1.newWinningAgent;
+              a1.winningBids[t.id] = d1.newWinningBid;
+            } else if (d1.action === 'RESET') {
+              a1.winningAgents[t.id] = null;
+              a1.winningBids[t.id] = 0;
+            }
+            decisions.push(createChoiLog(a1.id, a2.id, t.id, z1, y1, z2, y2, d1));
+
+            const d2 = resolveChoi2009Conflict(a2.id, a1.id, t.id, z2, y2, z1, y1);
+            if (d2.action === 'UPDATE') {
+              a2.winningAgents[t.id] = d2.newWinningAgent;
+              a2.winningBids[t.id] = d2.newWinningBid;
+            } else if (d2.action === 'RESET') {
+              a2.winningAgents[t.id] = null;
+              a2.winningBids[t.id] = 0;
+            }
+            decisions.push(createChoiLog(a2.id, a1.id, t.id, z2, y2, z1, y1, d2));
+          }
+        });
+      });
+
+      setAgents(updatedAgents);
+      const isConverged = conflictCount === 0;
+
+      const yMat: Record<string, Record<string, number>> = {};
+      const zMat: Record<string, Record<string, string | null>> = {};
+      updatedAgents.forEach((a) => {
+        yMat[a.id] = { ...a.winningBids };
+        zMat[a.id] = { ...a.winningAgents };
+      });
+
+      setCbbaStepState((prev) => ({
+        ...prev,
+        currentPhase: isConverged ? 'CONVERGED' : 'PHASE_2_CONSENSUS',
+        currentIteration: prev.currentIteration + 1,
+        droppedPacketsCount: prev.droppedPacketsCount + droppedCount,
+        yMatrix: yMat,
+        zMatrix: zMat,
+        recentDecisions: [...decisions, ...prev.recentDecisions].slice(0, 50),
+        isConverged,
+      }));
+
+      addLog(`CBBA STEP: Phase 2 gossip completed. ${decisions.length} Choi 2009 rules evaluated. Converged: ${isConverged}`);
+    }
+  }, [agents, commLinks, cbbaStepState.currentIteration, cbbaStepState.packetDropRatePct, runCBBAAuction, addLog]);
+
+  // --- Tactical Handlers: Red-Team Sandbox ---
+  const addThreat = useCallback((threat: Omit<RedTeamThreatEntity, 'id'>) => {
+    const id = `THREAT_${Date.now()}`;
+    const newThreat: RedTeamThreatEntity = { ...threat, id };
+    setRedTeamThreats((prev) => [...prev, newThreat]);
+    addLog(`RED-TEAM OPFOR: Deployed ${newThreat.name} (${newThreat.type}) at [${Math.round(newThreat.position[0])}, ${Math.round(newThreat.position[1])}].`);
+  }, [addLog]);
+
+  const removeThreat = useCallback((id: string) => {
+    setRedTeamThreats((prev) => prev.filter((t) => t.id !== id));
+    addLog(`RED-TEAM OPFOR: Eliminated threat ${id}.`);
+  }, [addLog]);
+
+  const toggleThreat = useCallback((id: string) => {
+    setRedTeamThreats((prev) => prev.map((t) => t.id === id ? { ...t, active: !t.active } : t));
+  }, []);
+
+  const addCustomTask = useCallback((customTask: Omit<TaskEntity, 'id' | 'status' | 'assignedAgentId' | 'progress'>) => {
+    const nextId = `T${tasks.length + 1}`;
+    const newTask: TaskEntity = {
+      ...customTask,
+      id: nextId,
+      status: 'UNASSIGNED',
+      assignedAgentId: null,
+      progress: 0,
+    };
+    setTasks((prev) => [...prev, newTask]);
+    addLog(`MISSION BUILDER: Injected custom task ${newTask.id} (${newTask.type}) with ${newTask.requiredPayload || 'GENERIC'} payload.`);
+    setTimeout(() => {
+      triggerAuction();
+    }, 100);
+  }, [tasks.length, triggerAuction, addLog]);
+
   return {
     agents: activeScrubbedSnapshot ? activeScrubbedSnapshot.agents : agents,
     tasks: activeScrubbedSnapshot ? activeScrubbedSnapshot.tasks : tasks,
@@ -1251,6 +1568,13 @@ ${tasks.map((t) => {
     takServerStatus,
     sdrMeshState,
     edgeLlmState,
+    windVector,
+    terrainRidges,
+    isAutonomousRelayActive,
+    relayLinks,
+    cbbaStepState,
+    redTeamThreats,
+    activeSandboxTool,
     setSelectedAgentId,
     setSelectedTaskId,
     setIsRunning,
@@ -1272,6 +1596,17 @@ ${tasks.map((t) => {
     setSdrRadioModel,
     toggleSdrCryptoSuite,
     triggerEdgeLlmInference,
+    updateWindVector,
+    toggleAutonomousRelay,
+    toggleStepMode,
+    setPacketDropRate,
+    resetAuctionStepDebugger,
+    stepAuctionIteration,
+    addThreat,
+    removeThreat,
+    toggleThreat,
+    addCustomTask,
+    setActiveSandboxTool,
     scrubToSnapshot: setActiveScrubbedSnapshot,
   };
 }
