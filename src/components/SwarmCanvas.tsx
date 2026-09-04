@@ -1,7 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { AgentEntity, TaskEntity, ObstacleEntity, ThreatZoneEntity, ByzantineState } from '../types';
 import { agentCallsignMap } from '../hooks/useSwarmSimulation';
-import { Radio, Compass, Eye, ShieldAlert } from 'lucide-react';
+import { Radio, Compass, Eye, ShieldAlert, Layers, BatteryCharging } from 'lucide-react';
 
 interface SwarmCanvasProps {
   agents: AgentEntity[];
@@ -121,19 +121,19 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
       ctx.fillText(`${threat.id} [${threat.type}]`, cx - 35, cy - threat.radius - 6);
     });
 
-    // 4. Draw Mesh / UWB Links
+    // 4. Draw Mesh / UWB Links / Directional Beamforming
     const isCrlMode = byzantineState?.isGpsDenied || tacticalMode.showUwbRangingMesh;
-
     commLinks.forEach(([id1, id2]) => {
       const a1 = agents.find((a) => a.id === id1);
       const a2 = agents.find((a) => a.id === id2);
       if (!a1 || !a2) return;
 
       const dist = Math.hypot(a1.position[0] - a2.position[0], a1.position[1] - a2.position[1]);
+      const hasRelay = a1.payloads.includes('HIGH_POWER_RELAY') || a2.payloads.includes('HIGH_POWER_RELAY');
 
       if (isCrlMode) {
         // UWB Cooperative Relative Localization ranging vector
-        ctx.strokeStyle = 'rgba(52, 211, 153, 0.5)'; // emerald
+        ctx.strokeStyle = 'rgba(52, 211, 153, 0.5)';
         ctx.lineWidth = 1.2;
         ctx.setLineDash([2, 2]);
         ctx.beginPath();
@@ -142,15 +142,28 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // Display UWB measured distance tag
         const midX = (a1.position[0] + a2.position[0]) / 2;
         const midY = (a1.position[1] + a2.position[1]) / 2;
         ctx.fillStyle = '#34d399';
         ctx.font = '8px monospace';
         ctx.fillText(`${(dist * 0.25).toFixed(1)}m`, midX - 12, midY - 3);
+      } else if (hasRelay) {
+        // Directional Beamforming Link (+6.5 dBi)
+        ctx.strokeStyle = 'rgba(14, 165, 233, 0.6)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(a1.position[0], a1.position[1]);
+        ctx.lineTo(a2.position[0], a2.position[1]);
+        ctx.stroke();
+
+        const midX = (a1.position[0] + a2.position[0]) / 2;
+        const midY = (a1.position[1] + a2.position[1]) / 2;
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = '7px monospace';
+        ctx.fillText('📡 BEAMFORMING +6.5dBi', midX - 35, midY - 4);
       } else {
         // Standard RF MANET mesh link
-        ctx.strokeStyle = 'rgba(56, 189, 248, 0.3)';
+        ctx.strokeStyle = 'rgba(56, 189, 248, 0.25)';
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(a1.position[0], a1.position[1]);
@@ -159,7 +172,7 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
       }
     });
 
-    // 5. Draw Tasks with Precedence DAG
+    // 5. Draw Tasks with Precedence DAG & Required Payloads
     tasks.forEach((task) => {
       if (task.prerequisites && task.prerequisites.length > 0) {
         task.prerequisites.forEach((prereqId) => {
@@ -179,23 +192,26 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
       }
     });
 
-    // Draw Tasks
     tasks.forEach((task) => {
       const [tx, ty] = task.position;
       const isSelected = selectedTaskId === task.id;
-      const hasUnmetPrereqs = task.prerequisites && task.prerequisites.some((pid) => {
-        const pt = tasks.find((t) => t.id === pid);
-        return !pt || pt.status !== 'COMPLETED';
-      });
 
       let color = '#94a3b8';
       if (task.status === 'COMPLETED') color = '#22c55e';
-      else if (task.status === 'IN_PROGRESS') color = '#facc15';
-      else if (hasUnmetPrereqs) color = '#f59e0b';
-      else if (task.status === 'ASSIGNED') color = '#38bdf8';
+      else if (task.status === 'IN_PROGRESS') color = '#38bdf8';
+      else if (task.status === 'ASSIGNED') color = '#fbbf24';
+
+      const hasUnmetPrereqs = task.prerequisites?.some((pId) => {
+        const pt = tasks.find((t) => t.id === pId);
+        return pt && pt.status !== 'COMPLETED';
+      });
+
+      if (hasUnmetPrereqs && task.status !== 'COMPLETED') {
+        color = '#64748b';
+      }
 
       if (isSelected) {
-        ctx.strokeStyle = '#f43f5e';
+        ctx.strokeStyle = '#38bdf8';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(tx, ty, 22, 0, Math.PI * 2);
@@ -230,27 +246,53 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
       if (hasUnmetPrereqs && task.status !== 'COMPLETED') {
         ctx.fillStyle = '#fbbf24';
         ctx.font = '9px monospace';
-        ctx.fillText(`🔒 REQ: ${task.prerequisites?.join(', ')}`, tx + 16, ty + 12);
+        ctx.fillText(`🔒 REQ: ${task.prerequisites?.join(', ')}`, tx + 16, ty + 10);
       } else if (task.assignedAgentId) {
         ctx.fillStyle = '#38bdf8';
         ctx.font = '10px monospace';
         const cSign = agentCallsignMap[task.assignedAgentId] || task.assignedAgentId;
-        ctx.fillText(`→ ${cSign}`, tx + 16, ty + 12);
+        ctx.fillText(`→ ${cSign.split(' ')[0]}`, tx + 16, ty + 10);
+      }
+
+      // Required Payload Tag
+      if (task.requiredPayload) {
+        ctx.fillStyle = '#f472b6';
+        ctx.font = '8px monospace';
+        ctx.fillText(`REQ: ${task.requiredPayload}`, tx + 16, ty + 20);
       }
     });
 
-    // 6. Draw Agents (Drones)
+    // 6. Draw Agents with Domain-Specific Geometry & MUM-T Recharging
+    const ugvHub = agents.find((a) => a.domain === 'GROUND_UGV' && a.isRechargeHub);
+
     agents.forEach((agent) => {
       const [ax, ay] = agent.position;
       const isSelected = selectedAgentId === agent.id;
       const isFailed = agent.status === 'FAILED' || agent.health.propulsion <= 0.1;
       const isJammed = agent.status === 'JAMMED' || agent.health.comms < 0.3;
+      const isRecharging = agent.status === 'RECHARGING';
       const callsign = agentCallsignMap[agent.id] || agent.id;
 
       // Byzantine State Check
       const byzInfo = byzantineState?.byzantineAgents[agent.id];
       const isQuarantined = byzInfo && (byzInfo.status === 'QUARANTINED' || byzInfo.status === 'EJECTED');
       const isSuspect = byzInfo && byzInfo.status === 'SUSPECT';
+
+      // Recharging Energy Tether
+      if (isRecharging && ugvHub) {
+        ctx.strokeStyle = '#10b981';
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(ugvHub.position[0], ugvHub.position[1]);
+        ctx.lineTo(ax, ay);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = '#34d399';
+        ctx.font = 'bold 8px monospace';
+        ctx.fillText('⚡ 500W WIRELESS DOCK', (ax + ugvHub.position[0]) / 2 - 30, (ay + ugvHub.position[1]) / 2 - 4);
+      }
 
       // Breadcrumbs
       if (agent.breadcrumbs.length > 1) {
@@ -270,7 +312,7 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
 
       // Path line to current target
       if (agent.targetPosition && !isFailed && !isQuarantined) {
-        ctx.strokeStyle = 'rgba(250, 204, 21, 0.4)';
+        ctx.strokeStyle = isRecharging ? 'rgba(16, 185, 129, 0.5)' : 'rgba(250, 204, 21, 0.4)';
         ctx.lineWidth = 1.5;
         ctx.setLineDash([4, 4]);
         ctx.beginPath();
@@ -312,79 +354,101 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
         ctx.strokeStyle = '#38bdf8';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(ax, ay, 22, 0, Math.PI * 2);
+        ctx.arc(ax, ay, 24, 0, Math.PI * 2);
         ctx.stroke();
       }
 
-      // Render Drone Frame
-      if (tacticalMode.showMilStdSymbology) {
-        // Military Airborne Chevron Symbol
-        ctx.strokeStyle = isQuarantined ? '#ef4444' : isFailed ? '#ef4444' : '#38bdf8';
-        ctx.lineWidth = 2;
+      // Domain-Specific Vehicle Rendering
+      ctx.save();
+      ctx.translate(ax, ay);
+      const rad = ((agent.headingDeg || 0) * Math.PI) / 180;
+      ctx.rotate(rad);
+
+      const themeColor = isQuarantined ? '#ef4444' : isFailed ? '#ef4444' : isJammed ? '#a855f7' : '#38bdf8';
+
+      if (agent.domain === 'AIR_FIXED_WING') {
+        // Delta Swept-Wing Geometry
+        ctx.fillStyle = themeColor;
         ctx.beginPath();
-        ctx.moveTo(ax, ay - 14);
-        ctx.lineTo(ax + 14, ay + 10);
-        ctx.lineTo(ax, ay + 4);
-        ctx.lineTo(ax - 14, ay + 10);
+        ctx.moveTo(0, -16);  // Nose
+        ctx.lineTo(14, 12);  // Right wingtip
+        ctx.lineTo(0, 6);    // Center notch
+        ctx.lineTo(-14, 12); // Left wingtip
         ctx.closePath();
-        ctx.stroke();
-
-        ctx.fillStyle = isQuarantined ? '#ef4444' : '#38bdf8';
-        ctx.beginPath();
-        ctx.arc(ax, ay, 4, 0, Math.PI * 2);
-        ctx.fill();
-      } else {
-        // Drone Quadcopter Arms
-        ctx.strokeStyle = isQuarantined ? '#ef4444' : isFailed ? '#ef4444' : '#ffffff';
-        ctx.lineWidth = 1.8;
-        ctx.beginPath();
-        ctx.moveTo(ax - 12, ay - 12);
-        ctx.lineTo(ax + 12, ay + 12);
-        ctx.moveTo(ax - 12, ay + 12);
-        ctx.lineTo(ax + 12, ay - 12);
-        ctx.stroke();
-
-        // Rotors
-        const armOff = 12;
-        [
-          [-armOff, -armOff],
-          [armOff, -armOff],
-          [-armOff, armOff],
-          [armOff, armOff],
-        ].forEach(([dx, dy]) => {
-          ctx.fillStyle = isFailed || isQuarantined ? '#7f1d1d' : 'rgba(255,255,255,0.7)';
-          ctx.beginPath();
-          ctx.arc(ax + dx, ay + dy, 4, 0, Math.PI * 2);
-          ctx.fill();
-        });
-
-        // Core
-        let bodyColor = '#38bdf8';
-        if (isQuarantined) bodyColor = '#ef4444';
-        else if (isFailed) bodyColor = '#ef4444';
-        else if (isJammed) bodyColor = '#a855f7';
-        else if (agent.status === 'EXECUTING') bodyColor = '#4ade80';
-
-        ctx.fillStyle = bodyColor;
-        ctx.beginPath();
-        ctx.arc(ax, ay, 8, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1.5;
         ctx.stroke();
-      }
+      } else if (agent.domain === 'GROUND_UGV') {
+        // Tracked Armored Ground Vehicle with Induction Recharge Bay
+        ctx.fillStyle = '#d97706';
+        ctx.fillRect(-10, -12, 20, 24); // chassis
+        // Left & Right tracks
+        ctx.fillStyle = '#475569';
+        ctx.fillRect(-14, -14, 4, 28);
+        ctx.fillRect(10, -14, 4, 28);
+        // Center illuminated wireless induction dock
+        ctx.fillStyle = '#10b981';
+        ctx.beginPath();
+        ctx.arc(0, 0, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      } else if (agent.domain === 'SURFACE_USV') {
+        // Surface Boat Hull with Wake Line
+        ctx.fillStyle = '#4f46e5';
+        ctx.beginPath();
+        ctx.moveTo(0, -14); // Bow
+        ctx.lineTo(8, 6);
+        ctx.lineTo(6, 14);  // Stern right
+        ctx.lineTo(-6, 14); // Stern left
+        ctx.lineTo(-8, 6);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#818cf8';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      } else {
+        // Rotary Multirotor (Quadcopter)
+        ctx.strokeStyle = isQuarantined ? '#ef4444' : isFailed ? '#ef4444' : '#ffffff';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(-11, -11);
+        ctx.lineTo(11, 11);
+        ctx.moveTo(-11, 11);
+        ctx.lineTo(11, -11);
+        ctx.stroke();
 
-      // Callsign or Agent ID
+        // 4 Rotors
+        [[-11, -11], [11, -11], [-11, 11], [11, 11]].forEach(([dx, dy]) => {
+          ctx.fillStyle = isFailed || isQuarantined ? '#7f1d1d' : 'rgba(255,255,255,0.7)';
+          ctx.beginPath();
+          ctx.arc(dx, dy, 3.5, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        // Fuselage
+        ctx.fillStyle = isRecharging ? '#10b981' : themeColor;
+        ctx.beginPath();
+        ctx.arc(0, 0, 6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      // Callsign or Agent ID Label
       ctx.fillStyle = '#f8fafc';
-      ctx.font = 'bold 11px monospace';
+      ctx.font = 'bold 10px monospace';
       const labelText = tacticalMode.showCotCallsigns 
-        ? `${callsign} [${agent.health.battery.toFixed(0)}%]`
+        ? `${callsign.split(' ')[0]} [${agent.health.battery.toFixed(0)}%]`
         : `${agent.id} [${agent.health.battery.toFixed(0)}%]`;
-      ctx.fillText(labelText, ax - 28, ay - 18);
+      ctx.fillText(labelText, ax - 24, ay - 18);
 
       // Status text
-      ctx.fillStyle = isQuarantined ? '#ef4444' : isFailed ? '#ef4444' : isJammed ? '#c084fc' : '#38bdf8';
-      ctx.font = '9px monospace';
+      ctx.fillStyle = isRecharging 
+        ? '#34d399' 
+        : isQuarantined ? '#ef4444' : isFailed ? '#ef4444' : isJammed ? '#c084fc' : '#38bdf8';
+      ctx.font = '8px monospace';
       ctx.fillText(agent.status, ax - 16, ay + 24);
     });
   }, [agents, tasks, obstacles, threatZones, commLinks, selectedAgentId, selectedTaskId, byzantineState, tacticalMode]);
@@ -408,7 +472,7 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
 
     for (const task of tasks) {
       const d = Math.hypot(task.position[0] - clickX, task.position[1] - clickY);
-      if (d <= 22) {
+      if (d <= 18) {
         onSelectTask(task.id);
         return;
       }
@@ -419,49 +483,43 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
   };
 
   return (
-    <div className="relative w-full h-full overflow-hidden rounded-xl border border-slate-800 bg-slate-950 shadow-inner flex flex-col">
-      {/* Top Tactical Toolbar */}
-      <div className="bg-slate-900/90 border-b border-slate-800/80 px-4 py-2 flex items-center justify-between flex-wrap gap-2 text-xs font-mono">
-        <div className="flex items-center gap-3">
-          <span className="text-slate-400 font-bold uppercase text-[11px] flex items-center gap-1.5">
-            <Eye className="w-3.5 h-3.5 text-sky-400" />
-            Tactical Overlays:
+    <div className="relative w-full rounded-2xl overflow-hidden border border-slate-800 bg-[#0a0f1d] shadow-2xl">
+      {/* Top Overlay Controls */}
+      <div className="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-auto z-10">
+        <div className="flex items-center gap-2">
+          <span className="px-2.5 py-1 rounded-md text-[11px] font-mono font-bold bg-slate-900/90 text-sky-400 border border-slate-700/80 backdrop-blur-md flex items-center gap-1.5 shadow-sm">
+            <span className="w-2 h-2 rounded-full bg-sky-400 animate-ping" />
+            THEATER MAP (WGS-84)
           </span>
 
-          <button
-            onClick={() => onToggleTacticalMode && onToggleTacticalMode('showMilStdSymbology')}
-            className={`px-2.5 py-1 rounded text-xs transition-colors flex items-center gap-1.5 ${
-              tacticalMode.showMilStdSymbology
-                ? 'bg-sky-500 text-white font-bold'
-                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-            }`}
-          >
-            <Compass className="w-3 h-3" />
-            MIL-STD-2525
-          </button>
-
-          <button
-            onClick={() => onToggleTacticalMode && onToggleTacticalMode('showUwbRangingMesh')}
-            className={`px-2.5 py-1 rounded text-xs transition-colors flex items-center gap-1.5 ${
-              tacticalMode.showUwbRangingMesh || byzantineState?.isGpsDenied
-                ? 'bg-emerald-600 text-white font-bold'
-                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-            }`}
-          >
-            <Radio className="w-3 h-3" />
-            UWB Ranging Mesh (CRL)
-          </button>
-
-          <button
-            onClick={() => onToggleTacticalMode && onToggleTacticalMode('showCotCallsigns')}
-            className={`px-2.5 py-1 rounded text-xs transition-colors ${
-              tacticalMode.showCotCallsigns
-                ? 'bg-slate-700 text-sky-300 font-bold'
-                : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-            }`}
-          >
-            Callsigns (VIPER)
-          </button>
+          {onToggleTacticalMode && (
+            <div className="flex items-center gap-1 bg-slate-900/90 border border-slate-700/80 rounded-md p-0.5 backdrop-blur-md">
+              <button
+                onClick={() => onToggleTacticalMode('showMilStdSymbology')}
+                className={`px-2 py-0.5 rounded text-[10px] font-mono transition-colors ${
+                  tacticalMode.showMilStdSymbology ? 'bg-sky-500 text-white font-bold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                MIL-STD
+              </button>
+              <button
+                onClick={() => onToggleTacticalMode('showUwbRangingMesh')}
+                className={`px-2 py-0.5 rounded text-[10px] font-mono transition-colors ${
+                  tacticalMode.showUwbRangingMesh ? 'bg-emerald-500 text-white font-bold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                UWB CRL
+              </button>
+              <button
+                onClick={() => onToggleTacticalMode('showCotCallsigns')}
+                className={`px-2 py-0.5 rounded text-[10px] font-mono transition-colors ${
+                  tacticalMode.showCotCallsigns ? 'bg-indigo-500 text-white font-bold' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                CALLSIGNS
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -483,31 +541,33 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
       </div>
 
       {/* Canvas */}
-      <div className="relative flex-1 flex items-center justify-center">
-        <canvas
-          id="swarm-simulation-canvas"
-          ref={canvasRef}
-          width={1000}
-          height={620}
-          onClick={handleCanvasClick}
-          className="w-full h-full object-contain cursor-crosshair"
-        />
+      <canvas
+        ref={canvasRef}
+        width={960}
+        height={560}
+        onClick={handleCanvasClick}
+        className="w-full h-auto cursor-crosshair block"
+      />
 
-        {/* Legend */}
-        <div className="absolute bottom-3 left-3 bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-lg p-2.5 text-[11px] font-mono text-slate-300 flex items-center gap-4 shadow-lg pointer-events-none">
-          <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-sky-400" /> Friendly Drone
+      {/* Bottom Legend */}
+      <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between text-[10px] text-slate-400 pointer-events-none font-mono">
+        <div className="flex items-center gap-3 bg-slate-900/80 px-2 py-1 rounded backdrop-blur border border-slate-800">
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-sky-400" /> Air (Fixed/Quad)
           </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-red-500" /> BFT Quarantined / Failed
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-amber-500" /> Ground UGV Hub
           </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-400" /> Task Target
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-indigo-500" /> Surface USV
           </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-4 h-0.5 bg-emerald-400/80 inline-block" /> UWB CRL Ranging Link
+          <span className="flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full bg-purple-500" /> Jammer
           </span>
         </div>
+        <span className="bg-slate-900/80 px-2 py-1 rounded backdrop-blur border border-slate-800">
+          Coordinate Projection: MCAS Miramar Tactical Grid (32.8812°N, 117.2345°W)
+        </span>
       </div>
     </div>
   );

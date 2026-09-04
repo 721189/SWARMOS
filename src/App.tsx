@@ -15,7 +15,9 @@ import {
   ShieldAlert,
   ShieldCheck, 
   Sparkles,
-  Satellite
+  Satellite,
+  Lock,
+  Boxes
 } from 'lucide-react';
 import { useSwarmSimulation } from './hooks/useSwarmSimulation';
 import { SwarmCanvas } from './components/SwarmCanvas';
@@ -29,9 +31,13 @@ import { TechnicalReportViewer } from './components/TechnicalReportViewer';
 import { ExplainModal } from './components/ExplainModal';
 import { AtakCotGateway } from './components/AtakCotGateway';
 import { ByzantineDefensePanel } from './components/ByzantineDefensePanel';
+import { HeterogeneousFleetPanel } from './components/HeterogeneousFleetPanel';
+import { SdrMeshPanel } from './components/SdrMeshPanel';
 
 type NavTab = 
   | 'simulation' 
+  | 'mumt'
+  | 'sdrmesh'
   | 'atak' 
   | 'byzantine' 
   | 'scaffold' 
@@ -65,6 +71,8 @@ export default function App() {
     byzantineState,
     cotEvents,
     takServerStatus,
+    sdrMeshState,
+    edgeLlmState,
     setSelectedAgentId,
     setSelectedTaskId,
     setIsRunning,
@@ -81,6 +89,10 @@ export default function App() {
     injectByzantineAttack,
     remediateByzantine,
     exportAtakMissionPackage,
+    dockAgentToUgv,
+    setSdrRadioModel,
+    toggleSdrCryptoSuite,
+    triggerEdgeLlmInference,
   } = useSwarmSimulation();
 
   const handleToggleTacticalMode = (key: 'showMilStdSymbology' | 'showUwbRangingMesh' | 'showCotCallsigns') => {
@@ -117,7 +129,7 @@ export default function App() {
                 )}
               </div>
               <p className="text-[11px] text-slate-400 hidden sm:block">
-                Strategic-Grade Autonomous Swarm OS • Byzantine-Resilient PNT &amp; Cursor-on-Target Gateway
+                Strategic-Grade Autonomous Swarm OS • MUM-T Multi-Domain Fleet &amp; Zero-Trust SDR MANET
               </p>
             </div>
           </div>
@@ -138,6 +150,32 @@ export default function App() {
             </button>
 
             <button
+              id="nav-tab-mumt"
+              onClick={() => setActiveTab('mumt')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all whitespace-nowrap ${
+                activeTab === 'mumt'
+                  ? 'bg-sky-500 text-slate-950 font-bold shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              }`}
+            >
+              <Boxes className="w-3.5 h-3.5 text-emerald-400" />
+              <span>MUM-T Fleet</span>
+            </button>
+
+            <button
+              id="nav-tab-sdrmesh"
+              onClick={() => setActiveTab('sdrmesh')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all whitespace-nowrap ${
+                activeTab === 'sdrmesh'
+                  ? 'bg-sky-500 text-slate-950 font-bold shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+              }`}
+            >
+              <Lock className="w-3.5 h-3.5 text-purple-400" />
+              <span>Zero-Trust SDR &amp; SLM</span>
+            </button>
+
+            <button
               id="nav-tab-atak"
               onClick={() => setActiveTab('atak')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all whitespace-nowrap ${
@@ -147,7 +185,7 @@ export default function App() {
               }`}
             >
               <Radio className="w-3.5 h-3.5 text-sky-400" />
-              <span>ATAK / CoT Gateway</span>
+              <span>ATAK / CoT</span>
             </button>
 
             <button
@@ -160,7 +198,7 @@ export default function App() {
               }`}
             >
               <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
-              <span>BFT &amp; GPS-Denied</span>
+              <span>BFT Defense</span>
             </button>
 
             <button
@@ -238,55 +276,38 @@ export default function App() {
           <div className="space-y-6 animate-in fade-in duration-150">
             {/* Split Canvas and Sidebar */}
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-              {/* Left Canvas Arena (7 cols on XL) */}
-              <div className="xl:col-span-8 flex flex-col space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-                    <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider">
-                      Tactical 2D Mesh Battleground [1000m x 650m]
-                    </span>
-                  </div>
-                  <div className="text-[11px] font-mono text-slate-400 flex items-center gap-2">
-                    <span>Active Mesh Links: <strong className="text-sky-400">{commLinks.length}</strong></span>
-                    <span>•</span>
-                    <span>Fleet: <strong className="text-emerald-400">{agents.filter(a => a.health.propulsion > 0.1).length} / {agents.length}</strong></span>
-                    <span>•</span>
-                    <span>PNT: <strong className={byzantineState.isGpsDenied ? 'text-amber-400' : 'text-emerald-400'}>{byzantineState.isGpsDenied ? 'UWB-CRL' : 'GNSS'}</strong></span>
-                  </div>
-                </div>
-
-                {/* 2D Canvas Element */}
-                <div className="h-[600px] w-full">
-                  <SwarmCanvas
-                    agents={agents}
-                    tasks={tasks}
-                    obstacles={obstacles}
-                    threatZones={threatZones}
-                    commLinks={commLinks}
-                    selectedAgentId={selectedAgentId}
-                    selectedTaskId={selectedTaskId}
-                    byzantineState={byzantineState}
-                    tacticalMode={tacticalMode}
-                    onToggleTacticalMode={handleToggleTacticalMode}
-                    onSelectAgent={(id) => setSelectedAgentId(id)}
-                    onSelectTask={(id) => {
-                      setSelectedTaskId(id);
-                      if (id) generateExplainData(id);
-                    }}
-                  />
-                </div>
+              <div className="xl:col-span-8">
+                <SwarmCanvas
+                  agents={agents}
+                  tasks={tasks}
+                  obstacles={obstacles}
+                  threatZones={threatZones}
+                  commLinks={commLinks}
+                  selectedAgentId={selectedAgentId}
+                  selectedTaskId={selectedTaskId}
+                  byzantineState={byzantineState}
+                  tacticalMode={tacticalMode}
+                  onToggleTacticalMode={handleToggleTacticalMode}
+                  onSelectAgent={setSelectedAgentId}
+                  onSelectTask={(taskId) => {
+                    setSelectedTaskId(taskId);
+                    if (taskId) generateExplainData(taskId);
+                  }}
+                />
               </div>
 
-              {/* Right Tactical Control Panel (5 cols on XL) */}
-              <div className="xl:col-span-4 flex flex-col space-y-4">
+              <div className="xl:col-span-4">
                 <SimulationControls
                   isRunning={isRunning}
-                  onTogglePlay={() => setIsRunning(!isRunning)}
-                  onReset={resetSimulation}
                   simSpeed={simSpeed}
-                  onChangeSpeed={(spd) => setSimSpeed(spd)}
-                  onInjectMotorFailure={injectMotorFailure}
+                  agents={agents}
+                  tasks={tasks}
+                  selectedAgentId={selectedAgentId}
+                  onToggleRun={() => setIsRunning(!isRunning)}
+                  onChangeSpeed={setSimSpeed}
+                  onReset={resetSimulation}
+                  onSelectAgent={setSelectedAgentId}
+                  onInjectFailure={injectMotorFailure}
                   onInjectJammer={injectJammer}
                   onInjectSAM={injectSAM}
                   onTriggerReplan={triggerAuction}
@@ -308,7 +329,32 @@ export default function App() {
           </div>
         )}
 
-        {/* Tab 2: ATAK / WinTAK Cursor-on-Target Gateway */}
+        {/* Tab 2: MUM-T Heterogeneous Multi-Domain Fleet */}
+        {activeTab === 'mumt' && (
+          <div className="animate-in fade-in duration-150">
+            <HeterogeneousFleetPanel
+              agents={agents}
+              tasks={tasks}
+              onDockAgentToUgv={dockAgentToUgv}
+              onSelectAgent={setSelectedAgentId}
+            />
+          </div>
+        )}
+
+        {/* Tab 3: Edge-Native Zero-Trust SDR & Jetson Orin SLM */}
+        {activeTab === 'sdrmesh' && (
+          <div className="animate-in fade-in duration-150">
+            <SdrMeshPanel
+              sdrMeshState={sdrMeshState}
+              edgeLlmState={edgeLlmState}
+              onSetRadioModel={setSdrRadioModel}
+              onToggleCryptoSuite={toggleSdrCryptoSuite}
+              onTriggerEdgeLlm={triggerEdgeLlmInference}
+            />
+          </div>
+        )}
+
+        {/* Tab 4: ATAK / WinTAK Cursor-on-Target Gateway */}
         {activeTab === 'atak' && (
           <div className="animate-in fade-in duration-150">
             <AtakCotGateway
@@ -321,7 +367,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Tab 3: GPS-Denied & Byzantine BFT Defense */}
+        {/* Tab 5: GPS-Denied & Byzantine BFT Defense */}
         {activeTab === 'byzantine' && (
           <div className="animate-in fade-in duration-150">
             <ByzantineDefensePanel
@@ -334,35 +380,35 @@ export default function App() {
           </div>
         )}
 
-        {/* Tab 4: Project Scaffold Explorer */}
+        {/* Tab 6: Project Scaffold Explorer */}
         {activeTab === 'scaffold' && (
           <div className="animate-in fade-in duration-150">
             <ScaffoldExplorer />
           </div>
         )}
 
-        {/* Tab 5: System Architecture Blueprint */}
+        {/* Tab 7: System Architecture Blueprint */}
         {activeTab === 'architecture' && (
           <div className="animate-in fade-in duration-150">
             <ArchitectureViewer />
           </div>
         )}
 
-        {/* Tab 6: 3-Minute Demo Video Script */}
+        {/* Tab 8: 3-Minute Demo Video Script */}
         {activeTab === 'storyboard' && (
           <div className="animate-in fade-in duration-150">
             <DemoScriptViewer />
           </div>
         )}
 
-        {/* Tab 7: Nebius Experiment Suite */}
+        {/* Tab 9: Nebius Experiment Suite */}
         {activeTab === 'nebius' && (
           <div className="animate-in fade-in duration-150">
             <NebiusMatrixViewer />
           </div>
         )}
 
-        {/* Tab 8: Technical Research Whitepaper */}
+        {/* Tab 10: Technical Research Whitepaper */}
         {activeTab === 'whitepaper' && (
           <div className="animate-in fade-in duration-150">
             <TechnicalReportViewer />
@@ -386,13 +432,13 @@ export default function App() {
             <span>SWARMOS Strategic Autonomous Swarm Intelligence • CBBA-BFT Consensus Protocol</span>
           </div>
           <div className="flex items-center gap-4 text-slate-400">
-            <span>MIL-STD-2525D</span>
+            <span>MUM-T Air+Ground+Surface</span>
             <span>•</span>
-            <span>ATAK / Cursor-on-Target</span>
+            <span>Zero-Trust SDR MANET</span>
             <span>•</span>
-            <span>GPS-Denied CRL</span>
+            <span>Jetson Orin Native TensorRT-LLM</span>
             <span>•</span>
-            <span>NVIDIA Nemotron-4-340B</span>
+            <span>ATAK CoT</span>
           </div>
         </div>
       </footer>

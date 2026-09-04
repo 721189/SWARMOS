@@ -1,6 +1,16 @@
 export type TaskType = 'RECON' | 'NEUTRALIZE' | 'RESCUE' | 'SURVEIL' | 'RELAY';
 export type TaskStatus = 'UNASSIGNED' | 'ASSIGNED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED';
-export type AgentStatus = 'IDLE' | 'BIDDING' | 'TRAVERSING' | 'EXECUTING' | 'RETURNING' | 'JAMMED' | 'FAILED';
+export type AgentStatus = 'IDLE' | 'BIDDING' | 'TRAVERSING' | 'EXECUTING' | 'RETURNING' | 'JAMMED' | 'FAILED' | 'RECHARGING';
+
+// Multi-Domain & Payload Capability
+export type AgentDomain = 'AIR_FIXED_WING' | 'AIR_MULTIROTOR' | 'GROUND_UGV' | 'SURFACE_USV';
+export type PayloadCapability = 
+  | 'FLIR_THERMAL' 
+  | 'SIGINT_DIRECTION_FINDER' 
+  | 'LIDAR_3D' 
+  | 'HEAVY_CARGO' 
+  | 'MOBILE_RECHARGE_BAY' 
+  | 'HIGH_POWER_RELAY';
 
 export interface TaskEntity {
   id: string;
@@ -14,6 +24,8 @@ export interface TaskEntity {
   progress: number; // 0 to 1
   description: string;
   prerequisites?: string[]; // Task IDs that must be completed before execution
+  requiredPayload?: PayloadCapability;
+  requiredDomain?: AgentDomain;
 }
 
 export interface MavlinkPacket {
@@ -54,6 +66,14 @@ export interface AgentHealth {
 
 export interface AgentEntity {
   id: string;
+  callsign: string;
+  domain: AgentDomain;
+  payloads: PayloadCapability[];
+  altitudeM: number;
+  batteryCapacityWh: number;
+  headingDeg: number;
+  isRechargeHub?: boolean;
+  dockedAgents?: string[];
   position: [number, number];
   targetPosition: [number, number] | null;
   homeBase: [number, number];
@@ -166,4 +186,39 @@ export interface TakServerStatus {
   protocol: 'UDP_MULTICAST' | 'TLS_TCP' | 'COT_STREAM';
   packetsOut: number;
   lastHeartbeat: string;
+}
+
+// --- Tactical SDR MANET & Zero-Trust Cryptography ---
+export interface SdrMeshState {
+  radioModel: 'SILVUS_STREAMCASTER_4400' | 'TRELLISWARE_TW950' | 'PERSISTENT_MPU5';
+  frequencyMhz: number;
+  bandwidthMhz: number;
+  txPowerDbm: number;
+  rfJammingActive: boolean;
+  averageSnrDb: number;
+  packetLossPct: number;
+  throughputMbps: number;
+  channelFadingModel: 'RAYLEIGH' | 'RICIAN_K4' | 'LOG_NORMAL_SHADOWING';
+  cryptoSuite: 'CHACHA20_POLY1305' | 'CRYSTALS_KYBER_PQ';
+  activeKeyEpoch: number;
+  epochExpiresSec: number;
+  replayAttacksBlocked: number;
+  beamformingGainDbi: number;
+  frequencyHoppingRateHopsSec: number;
+}
+
+// --- Edge SLM Jetson Orin Native Engine ---
+export interface EdgeLlmState {
+  model: 'SmolLM2-1.7B-Q4' | 'Phi-3.5-mini-Instruct-Q4' | 'Llama-3.2-3B-Q4';
+  targetHardware: 'NVIDIA Jetson AGX Orin 64GB' | 'Jetson Orin Nano 8GB';
+  inferenceEngine: 'TensorRT-LLM C++ Native' | 'llama.cpp GGUF';
+  latencyMs: number;
+  tokensPerSec: number;
+  vramUsageMb: number;
+  isOffline: boolean;
+  promptTokens: number;
+  completionTokens: number;
+  lastEdgePlan: string;
+  lastEdgePrompt: string;
+  isInferring: boolean;
 }

@@ -11,16 +11,19 @@ import {
   ByzantineState,
   ByzantineAttackType,
   CotEvent,
-  TakServerStatus
+  TakServerStatus,
+  SdrMeshState,
+  EdgeLlmState,
+  PayloadCapability
 } from '../types';
 
 export const agentCallsignMap: Record<string, string> = {
-  'A1': 'VIPER-01',
-  'A2': 'VIPER-02',
-  'A3': 'VIPER-03',
-  'A4': 'VIPER-04',
-  'A5': 'VIPER-05',
-  'A6': 'VIPER-06',
+  'A1': 'VIPER-01 (Fixed-Wing)',
+  'A2': 'VIPER-02 (Multirotor)',
+  'A3': 'VIPER-03 (Cargo Quad)',
+  'A4': 'VIPER-04 (Lidar Quad)',
+  'A5': 'TITAN-01 (UGV Hub)',
+  'A6': 'NAUTILUS-01 (USV Relay)',
 };
 
 export const canvasToGeo = (x: number, y: number): { lat: number; lon: number } => {
@@ -37,18 +40,23 @@ export const generateCotXml = (agent: AgentEntity, callsign: string): string => 
   const timeStr = now.toISOString();
   const staleTime = new Date(now.getTime() + 25000).toISOString();
   const speedKts = Math.round(agent.speed * agent.health.propulsion * 0.54);
-  const headingDeg = Math.round((Math.atan2(agent.position[1] - agent.homeBase[1], agent.position[0] - agent.homeBase[0]) * 180 / Math.PI + 360) % 360);
+  const headingDeg = agent.headingDeg || 45;
+
+  let cotType = 'a-f-A-M-F-Q';
+  if (agent.domain === 'AIR_FIXED_WING') cotType = 'a-f-A-M-F-F';
+  else if (agent.domain === 'GROUND_UGV') cotType = 'a-f-G-U-C-I';
+  else if (agent.domain === 'SURFACE_USV') cotType = 'a-f-S-X-M';
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<event version="2.0" uid="SWARMOS-${callsign}" type="a-f-A-M-F-Q" how="m-g" time="${timeStr}" start="${timeStr}" stale="${staleTime}">
-  <point lat="${geo.lat.toFixed(6)}" lon="${geo.lon.toFixed(6)}" hae="125.0" ce="1.5" le="2.0"/>
+<event version="2.0" uid="SWARMOS-${callsign.split(' ')[0]}" type="${cotType}" how="m-g" time="${timeStr}" start="${timeStr}" stale="${staleTime}">
+  <point lat="${geo.lat.toFixed(6)}" lon="${geo.lon.toFixed(6)}" hae="${agent.altitudeM}.0" ce="1.5" le="2.0"/>
   <detail>
-    <contact callsign="${callsign}" endpoint="192.168.10.${agent.id.replace('A','')}:4242"/>
+    <contact callsign="${callsign.split(' ')[0]}" endpoint="192.168.10.${agent.id.replace('A','')}:4242"/>
     <track speed="${speedKts}.0" course="${headingDeg}.0"/>
     <status battery="${Math.round(agent.health.battery)}" readiness="true"/>
     <precisionlocation altsrc="UWB_CRL" geopointsrc="UWB_MESH"/>
-    <takv os="Linux-aarch64" version="4.10.0" device="OrinNano" platform="WinTAK"/>
-    <remarks>Assigned: ${agent.currentTaskId || 'NONE'} | Status: ${agent.status} | Packets: ${agent.messagesSent}</remarks>
+    <takv os="Linux-aarch64" version="4.10.0" device="OrinJetson" platform="WinTAK"/>
+    <remarks>Domain: ${agent.domain} | Payloads: [${agent.payloads.join(', ')}] | Status: ${agent.status} | Packets: ${agent.messagesSent}</remarks>
   </detail>
 </event>`;
 };
@@ -66,14 +74,20 @@ export function useSwarmSimulation() {
   const [activeScrubbedSnapshot, setActiveScrubbedSnapshot] = useState<BlackBoxSnapshot | null>(null);
   const tickRef = useRef<number>(0);
 
-  // Initial Agents
+  // Heterogeneous Multi-Domain Fleet
   const initialAgents: AgentEntity[] = [
     {
       id: 'A1',
+      callsign: 'VIPER-01',
+      domain: 'AIR_FIXED_WING',
+      payloads: ['SIGINT_DIRECTION_FINDER', 'FLIR_THERMAL'],
+      altitudeM: 180,
+      batteryCapacityWh: 450,
+      headingDeg: 45,
       position: [120, 180],
       targetPosition: null,
       homeBase: [120, 180],
-      speed: 65,
+      speed: 92,
       maxBundleSize: 3,
       status: 'IDLE',
       health: { propulsion: 1.0, comms: 1.0, gps: 1.0, battery: 98 },
@@ -84,18 +98,24 @@ export function useSwarmSimulation() {
       currentTaskId: null,
       executionTimer: 0,
       breadcrumbs: [[120, 180]],
-      messagesSent: 14,
+      messagesSent: 24,
       distanceTraveled: 0,
     },
     {
       id: 'A2',
+      callsign: 'VIPER-02',
+      domain: 'AIR_MULTIROTOR',
+      payloads: ['FLIR_THERMAL'],
+      altitudeM: 60,
+      batteryCapacityWh: 180,
+      headingDeg: 90,
       position: [150, 320],
       targetPosition: null,
       homeBase: [150, 320],
-      speed: 68,
+      speed: 66,
       maxBundleSize: 3,
       status: 'IDLE',
-      health: { propulsion: 1.0, comms: 1.0, gps: 1.0, battery: 96 },
+      health: { propulsion: 1.0, comms: 1.0, gps: 1.0, battery: 92 },
       bundle: [],
       path: [],
       winningBids: {},
@@ -108,13 +128,19 @@ export function useSwarmSimulation() {
     },
     {
       id: 'A3',
+      callsign: 'VIPER-03',
+      domain: 'AIR_MULTIROTOR',
+      payloads: ['HEAVY_CARGO'],
+      altitudeM: 45,
+      batteryCapacityWh: 260,
+      headingDeg: 120,
       position: [130, 460],
       targetPosition: null,
       homeBase: [130, 460],
-      speed: 62,
+      speed: 54,
       maxBundleSize: 3,
       status: 'IDLE',
-      health: { propulsion: 1.0, comms: 1.0, gps: 1.0, battery: 99 },
+      health: { propulsion: 1.0, comms: 1.0, gps: 1.0, battery: 89 },
       bundle: [],
       path: [],
       winningBids: {},
@@ -122,15 +148,21 @@ export function useSwarmSimulation() {
       currentTaskId: null,
       executionTimer: 0,
       breadcrumbs: [[130, 460]],
-      messagesSent: 12,
+      messagesSent: 16,
       distanceTraveled: 0,
     },
     {
       id: 'A4',
+      callsign: 'VIPER-04',
+      domain: 'AIR_MULTIROTOR',
+      payloads: ['LIDAR_3D'],
+      altitudeM: 55,
+      batteryCapacityWh: 180,
+      headingDeg: 180,
       position: [240, 150],
       targetPosition: null,
       homeBase: [240, 150],
-      speed: 70,
+      speed: 68,
       maxBundleSize: 3,
       status: 'IDLE',
       health: { propulsion: 1.0, comms: 1.0, gps: 1.0, battery: 94 },
@@ -141,18 +173,26 @@ export function useSwarmSimulation() {
       currentTaskId: null,
       executionTimer: 0,
       breadcrumbs: [[240, 150]],
-      messagesSent: 16,
+      messagesSent: 20,
       distanceTraveled: 0,
     },
     {
       id: 'A5',
+      callsign: 'TITAN-01',
+      domain: 'GROUND_UGV',
+      payloads: ['MOBILE_RECHARGE_BAY', 'HIGH_POWER_RELAY'],
+      altitudeM: 0,
+      batteryCapacityWh: 5200,
+      headingDeg: 270,
+      isRechargeHub: true,
+      dockedAgents: [],
       position: [260, 310],
       targetPosition: null,
       homeBase: [260, 310],
-      speed: 64,
+      speed: 36,
       maxBundleSize: 3,
       status: 'IDLE',
-      health: { propulsion: 1.0, comms: 1.0, gps: 1.0, battery: 97 },
+      health: { propulsion: 1.0, comms: 1.0, gps: 1.0, battery: 99 },
       bundle: [],
       path: [],
       winningBids: {},
@@ -160,18 +200,24 @@ export function useSwarmSimulation() {
       currentTaskId: null,
       executionTimer: 0,
       breadcrumbs: [[260, 310]],
-      messagesSent: 15,
+      messagesSent: 32,
       distanceTraveled: 0,
     },
     {
       id: 'A6',
+      callsign: 'NAUTILUS-01',
+      domain: 'SURFACE_USV',
+      payloads: ['HIGH_POWER_RELAY', 'SIGINT_DIRECTION_FINDER'],
+      altitudeM: 0,
+      batteryCapacityWh: 3800,
+      headingDeg: 315,
       position: [250, 480],
       targetPosition: null,
       homeBase: [250, 480],
-      speed: 66,
+      speed: 44,
       maxBundleSize: 3,
       status: 'IDLE',
-      health: { propulsion: 1.0, comms: 1.0, gps: 1.0, battery: 95 },
+      health: { propulsion: 1.0, comms: 1.0, gps: 1.0, battery: 96 },
       bundle: [],
       path: [],
       winningBids: {},
@@ -179,86 +225,92 @@ export function useSwarmSimulation() {
       currentTaskId: null,
       executionTimer: 0,
       breadcrumbs: [[250, 480]],
-      messagesSent: 11,
+      messagesSent: 28,
       distanceTraveled: 0,
     },
   ];
 
-  // Initial Tasks
+  // Initial Tasks with Role-Based Payload Constraints
   const initialTasks: TaskEntity[] = [
     {
       id: 'T1',
       type: 'RECON',
       position: [460, 140],
-      baseReward: 100,
+      baseReward: 110,
       duration: 5,
       urgencyWeight: 1.2,
       status: 'UNASSIGNED',
       assignedAgentId: null,
       progress: 0,
-      description: 'Perform optical ISR sweep of perimeter sector alpha',
+      description: 'Optical & FLIR thermal sweep of perimeter sector alpha',
+      requiredPayload: 'FLIR_THERMAL',
     },
     {
       id: 'T2',
       type: 'RESCUE',
       position: [680, 220],
-      baseReward: 140,
+      baseReward: 160,
       duration: 6,
-      urgencyWeight: 1.5,
+      urgencyWeight: 1.6,
       status: 'UNASSIGNED',
       assignedAgentId: null,
       progress: 0,
-      description: 'Deliver emergency medical packet to stranded casualty',
+      description: 'Deliver 15kg emergency relief payload to isolated squad',
+      requiredPayload: 'HEAVY_CARGO',
     },
     {
       id: 'T3',
       type: 'NEUTRALIZE',
       position: [580, 420],
-      baseReward: 160,
+      baseReward: 175,
       duration: 7,
       urgencyWeight: 1.8,
       status: 'UNASSIGNED',
       assignedAgentId: null,
       progress: 0,
-      description: 'Deploy electronic countermeasure to suppress radar node',
+      description: 'SIGINT RF direction finding and radar node geo-triangulation',
+      requiredPayload: 'SIGINT_DIRECTION_FINDER',
       prerequisites: ['T1'],
     },
     {
       id: 'T4',
       type: 'SURVEIL',
       position: [820, 340],
-      baseReward: 110,
+      baseReward: 120,
       duration: 6,
-      urgencyWeight: 1.0,
+      urgencyWeight: 1.1,
       status: 'UNASSIGNED',
       assignedAgentId: null,
       progress: 0,
-      description: 'Persistent loiter surveillance over highway choke-point',
+      description: '3D high-density lidar point-cloud mapping of highway choke-point',
+      requiredPayload: 'LIDAR_3D',
     },
     {
       id: 'T5',
       type: 'RELAY',
       position: [750, 520],
-      baseReward: 130,
+      baseReward: 140,
       duration: 5,
-      urgencyWeight: 1.1,
+      urgencyWeight: 1.2,
       status: 'UNASSIGNED',
       assignedAgentId: null,
       progress: 0,
-      description: 'Bridge high-bandwidth RF mesh across mountain ridge',
+      description: 'High-power directional beamforming bridge across mountain ridge',
+      requiredPayload: 'HIGH_POWER_RELAY',
       prerequisites: ['T3'],
     },
     {
       id: 'T6',
       type: 'RECON',
       position: [880, 180],
-      baseReward: 95,
+      baseReward: 100,
       duration: 4,
       urgencyWeight: 1.0,
       status: 'UNASSIGNED',
       assignedAgentId: null,
       progress: 0,
-      description: 'Thermal sweep of eastern industrial hangar',
+      description: 'FLIR thermal perimeter patrol over eastern industrial hangar',
+      requiredPayload: 'FLIR_THERMAL',
     },
   ];
 
@@ -282,6 +334,50 @@ export function useSwarmSimulation() {
   const [obstacles, setObstacles] = useState<ObstacleEntity[]>(initialObstacles);
   const [threatZones, setThreatZones] = useState<ThreatZoneEntity[]>(initialThreats);
   const [commLinks, setCommLinks] = useState<[string, string][]>([]);
+
+  // --- Tactical SDR MANET State ---
+  const [sdrMeshState, setSdrMeshState] = useState<SdrMeshState>({
+    radioModel: 'SILVUS_STREAMCASTER_4400',
+    frequencyMhz: 2250.0,
+    bandwidthMhz: 20.0,
+    txPowerDbm: 33.0,
+    rfJammingActive: false,
+    averageSnrDb: 25.4,
+    packetLossPct: 0.15,
+    throughputMbps: 18.2,
+    channelFadingModel: 'RAYLEIGH',
+    cryptoSuite: 'CHACHA20_POLY1305',
+    activeKeyEpoch: 104,
+    epochExpiresSec: 46,
+    replayAttacksBlocked: 21,
+    beamformingGainDbi: 6.5,
+    frequencyHoppingRateHopsSec: 1200,
+  });
+
+  // --- Edge SLM Jetson Orin Native Engine ---
+  const [edgeLlmState, setEdgeLlmState] = useState<EdgeLlmState>({
+    model: 'SmolLM2-1.7B-Q4',
+    targetHardware: 'NVIDIA Jetson AGX Orin 64GB',
+    inferenceEngine: 'TensorRT-LLM C++ Native',
+    latencyMs: 38,
+    tokensPerSec: 79.2,
+    vramUsageMb: 1840,
+    isOffline: true,
+    promptTokens: 342,
+    completionTokens: 135,
+    isInferring: false,
+    lastEdgePrompt: 'Tactical Situation: High-power RF jammer active at Grid (650, 380). Rebalance multi-domain fleet.',
+    lastEdgePlan: `[JETSON ORIN TENSORRT-LLM MISSION REPLAN]
+Execution Mode: 100% Offline C++ TensorRT-LLM (INT4 Quantized)
+Domain Coordination Summary:
+1. High-Altitude Airborne Scout: VIPER-01 (Fixed-Wing, 180m) maintains standoff SIGINT orbit outside 100m jamming radius.
+2. Ground Mobility Anchor: TITAN-01 (Heavy UGV) dispatched as high-power relay node to establish +6.5 dBi beamforming link with NAUTILUS-01 (USV).
+3. Payload Constraint Matching:
+   - Task T2 [RESCUE] awarded exclusively to VIPER-03 (Cargo Quad) holding HEAVY_CARGO payload.
+   - Task T4 [SURVEIL] awarded exclusively to VIPER-04 (Lidar Quad) holding LIDAR_3D.
+4. Autonomous Dock-Recharge: Multirotor VIPER-02 battery prioritized for mobile inductive docking onto TITAN-01.
+5. Zero-Trust Layer: ChaCha20-Poly1305 nonce synchronized across all 6 ad-hoc SDR nodes. Replay attacks blocked.`,
+  });
 
   // --- Byzantine & GPS-Denied State ---
   const [byzantineState, setByzantineState] = useState<ByzantineState>({
@@ -323,7 +419,7 @@ export function useSwarmSimulation() {
     connected: true,
     endpoint: '239.2.3.1:6969',
     protocol: 'UDP_MULTICAST',
-    packetsOut: 184,
+    packetsOut: 240,
     lastHeartbeat: new Date().toISOString().substring(11, 19),
   });
 
@@ -331,19 +427,19 @@ export function useSwarmSimulation() {
     taskCompletionPct: 0,
     completedTasks: 0,
     totalTasks: initialTasks.length,
-    avgConsensusMs: 18.2,
+    avgConsensusMs: 16.8,
     resilienceFactorPct: 100,
     operationalFleetPct: 100,
-    totalMeshPackets: 86,
+    totalMeshPackets: 112,
     totalRewardEarned: 0,
-    avgBatteryPct: 96,
+    avgBatteryPct: 95,
   });
 
   const addLog = useCallback((msg: string) => {
     setEventLogs((prev) => [msg, ...prev].slice(0, 30));
   }, []);
 
-  // CBBA Auction calculation
+  // CBBA Auction calculation with Payload & Domain Constraint-Satisfaction
   const runCBBAAuction = useCallback((currentAgents: AgentEntity[], currentTasks: TaskEntity[]) => {
     const updatedAgents = currentAgents.map((a) => ({
       ...a,
@@ -359,7 +455,7 @@ export function useSwarmSimulation() {
       if (byz && (byz.status === 'QUARANTINED' || byz.status === 'EJECTED')) {
         return false; // BFT 2f+1 Quorum isolates quarantined/ejected nodes
       }
-      return a.health.propulsion > 0.1 && a.health.battery > 5;
+      return a.health.propulsion > 0.1 && a.health.battery > 5 && a.status !== 'RECHARGING';
     });
 
     if (operationalAgents.length === 0) return { updatedAgents, updatedTasks };
@@ -373,6 +469,16 @@ export function useSwarmSimulation() {
 
       for (const agent of operationalAgents) {
         if (agent.bundle.length >= agent.maxBundleSize) continue;
+
+        // Constraint-Satisfaction 1: Payload Compatibility
+        if (task.requiredPayload && !agent.payloads.includes(task.requiredPayload)) {
+          continue; // Incompatible sensor / hardware
+        }
+
+        // Constraint-Satisfaction 2: Domain Compatibility
+        if (task.requiredDomain && agent.domain !== task.requiredDomain) {
+          continue; // Domain mismatch (e.g. Ground UGV vs Air Fixed-Wing)
+        }
 
         const byz = byzantineStateRef.current.byzantineAgents[agent.id];
 
@@ -459,93 +565,213 @@ export function useSwarmSimulation() {
     return { updatedAgents, updatedTasks };
   }, []);
 
-  // Trigger consensus auction on mount or reset
   const triggerAuction = useCallback(() => {
-    setAgents((prevAgents) => {
-      setTasks((prevTasks) => {
-        const res = runCBBAAuction(prevAgents, prevTasks);
-        addLog(`CBBA Auction completed: ${res.updatedAgents.length} agents converged in 17.6 ms.`);
-        return res.updatedTasks;
-      });
-      return prevAgents;
-    });
-  }, [runCBBAAuction, addLog]);
+    const res = runCBBAAuction(agents, tasksRef.current);
+    setAgents(res.updatedAgents);
+    setTasks(res.updatedTasks);
+    addLog(`CBBA AUCTION: Quorum consensus converged in ${(14 + Math.random() * 6).toFixed(1)} ms with constraint satisfaction.`);
+  }, [agents, runCBBAAuction, addLog]);
 
-  // Initial auction trigger
+  // Initial auction on mount
   useEffect(() => {
     triggerAuction();
   }, []);
 
-  // Compute 1-hop mesh links
+  // Update mesh connectivity & SDR RF metrics
   useEffect(() => {
     const links: [string, string][] = [];
     const maxCommDist = 280;
+    let totalSnr = 0;
+    let linkCount = 0;
 
     for (let i = 0; i < agents.length; i++) {
       for (let j = i + 1; j < agents.length; j++) {
         const a1 = agents[i];
         const a2 = agents[j];
-        if (a1.health.propulsion <= 0.1 || a2.health.propulsion <= 0.1) continue;
-
         const dist = Math.hypot(a1.position[0] - a2.position[0], a1.position[1] - a2.position[1]);
+
         if (dist <= maxCommDist) {
-          // Check if link is disrupted by Jammer
-          const midX = (a1.position[0] + a2.position[0]) / 2;
-          const midY = (a1.position[1] + a2.position[1]) / 2;
-          const inJammer = threatZones.some((tz) => {
-            if (tz.type !== 'RF_JAMMER') return false;
-            return Math.hypot(midX - tz.center[0], midY - tz.center[1]) < tz.radius * 0.75;
-          });
+          // Check if link passes through RF Jammer
+          let inJammer = false;
+          for (const threat of threatZones) {
+            if (threat.type === 'RF_JAMMER') {
+              const dMid = Math.hypot(
+                (a1.position[0] + a2.position[0]) / 2 - threat.center[0],
+                (a1.position[1] + a2.position[1]) / 2 - threat.center[1]
+              );
+              if (dMid <= threat.radius) {
+                inJammer = true;
+                break;
+              }
+            }
+          }
 
           if (!inJammer) {
             links.push([a1.id, a2.id]);
+            // Calculate Path Loss & SNR
+            // FSPL ~ 20*log10(dist) + 20*log10(2250MHz) - 147.55
+            const fsplDb = 20 * Math.log10(Math.max(10, dist)) + 20 * Math.log10(sdrMeshState.frequencyMhz) - 147.55;
+            const hasRelay = a1.payloads.includes('HIGH_POWER_RELAY') || a2.payloads.includes('HIGH_POWER_RELAY');
+            const beamGain = hasRelay ? sdrMeshState.beamformingGainDbi : 2.1;
+            const rxPowerDbm = sdrMeshState.txPowerDbm + beamGain - fsplDb;
+            const snrDb = Math.max(0, rxPowerDbm - (-101.0)); // Noise floor -101 dBm
+            totalSnr += snrDb;
+            linkCount++;
           }
         }
       }
     }
-    setCommLinks(links);
-  }, [agents, threatZones]);
 
-  // Simulation physics step
+    setCommLinks(links);
+
+    // Update SDR Mesh KPI
+    const avgSnr = linkCount > 0 ? totalSnr / linkCount : 12.0;
+    const packetLoss = avgSnr < 10 ? 12.5 : avgSnr < 18 ? 2.4 : 0.15;
+    const throughput = Math.max(2.0, Number(((avgSnr / 30.0) * 22.5).toFixed(1)));
+
+    setSdrMeshState((prev) => ({
+      ...prev,
+      averageSnrDb: Number(avgSnr.toFixed(1)),
+      packetLossPct: Number(packetLoss.toFixed(2)),
+      throughputMbps: throughput,
+    }));
+  }, [agents, threatZones, sdrMeshState.frequencyMhz, sdrMeshState.txPowerDbm, sdrMeshState.beamformingGainDbi]);
+
+  // Key Epoch Countdown & Anti-Replay Keystream
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSdrMeshState((prev) => {
+        const nextSec = prev.epochExpiresSec - 1;
+        if (nextSec <= 0) {
+          return {
+            ...prev,
+            activeKeyEpoch: prev.activeKeyEpoch + 1,
+            epochExpiresSec: 60,
+            replayAttacksBlocked: prev.replayAttacksBlocked + Math.floor(Math.random() * 3),
+          };
+        }
+        return { ...prev, epochExpiresSec: nextSec };
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Simulation physics & MUM-T recharging loop
   useEffect(() => {
     if (!isRunning) return;
 
     const interval = setInterval(() => {
       setAgents((prevAgents) => {
-        let updated = false;
+        // Find UGV recharge hub
+        const ugvHub = prevAgents.find((a) => a.domain === 'GROUND_UGV' && a.isRechargeHub);
 
         const nextAgents = prevAgents.map((agent) => {
           if (agent.health.propulsion <= 0.1 || agent.status === 'FAILED') {
             return agent;
           }
 
+          // Handle Recharging at UGV Dock
+          if (agent.status === 'RECHARGING') {
+            const reloadedBattery = Math.min(100, agent.health.battery + (0.5 * simSpeed));
+            if (reloadedBattery >= 96) {
+              addLog(`MUM-T DOCK: ${agent.callsign} induction recharging complete (96%). Returning to active patrol.`);
+              return {
+                ...agent,
+                status: 'IDLE' as const,
+                health: { ...agent.health, battery: 96 },
+              };
+            }
+            return {
+              ...agent,
+              health: { ...agent.health, battery: reloadedBattery },
+            };
+          }
+
+          // Check if Multirotor needs emergency recharge
+          if (
+            agent.domain === 'AIR_MULTIROTOR' &&
+            agent.health.battery < 25 &&
+            ugvHub &&
+            agent.status !== 'EXECUTING'
+          ) {
+            const distToUgv = Math.hypot(agent.position[0] - ugvHub.position[0], agent.position[1] - ugvHub.position[1]);
+            if (distToUgv < 35) {
+              addLog(`MUM-T DOCK: ${agent.callsign} docked with ${ugvHub.callsign} Mobile Ground Recharge Bay.`);
+              return {
+                ...agent,
+                status: 'RECHARGING' as const,
+                targetPosition: ugvHub.position,
+              };
+            } else {
+              // Fly to UGV for recharge
+              const speed = (agent.speed * agent.health.propulsion * simSpeed * 0.05);
+              const dx = ugvHub.position[0] - agent.position[0];
+              const dy = ugvHub.position[1] - agent.position[1];
+              const newPos: [number, number] = [
+                agent.position[0] + (dx / distToUgv) * speed,
+                agent.position[1] + (dy / distToUgv) * speed,
+              ];
+              return {
+                ...agent,
+                position: newPos,
+                targetPosition: ugvHub.position,
+                status: 'RETURNING' as const,
+              };
+            }
+          }
+
           const speed = (agent.speed * agent.health.propulsion * simSpeed * 0.05);
           let newPos = [...agent.position] as [number, number];
           let newTarget = agent.targetPosition;
           let newStatus = agent.status;
-          let newCurrentTask = agent.currentTaskId;
+          let heading = agent.headingDeg;
 
-          if (agent.targetPosition) {
+          // Fixed-wing continuous sweeping orbit physics vs Multirotor direct hover
+          if (agent.domain === 'AIR_FIXED_WING' && agent.targetPosition) {
             const dx = agent.targetPosition[0] - agent.position[0];
             const dy = agent.targetPosition[1] - agent.position[1];
             const dist = Math.hypot(dx, dy);
 
-            if (dist > 4) {
-              // Move towards target
+            if (dist > 40) {
               const step = Math.min(dist, speed);
               newPos = [
                 agent.position[0] + (dx / dist) * step,
                 agent.position[1] + (dy / dist) * step,
               ];
+              heading = Math.round((Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360);
               newStatus = 'TRAVERSING';
             } else {
-              // Arrived at target task
+              // Sweeping loiter orbit around target
+              const orbitRadius = 45;
+              const angle = (Date.now() / 2000) * (agent.speed / 50);
+              newPos = [
+                agent.targetPosition[0] + Math.cos(angle) * orbitRadius,
+                agent.targetPosition[1] + Math.sin(angle) * orbitRadius,
+              ];
+              heading = Math.round(((angle + Math.PI / 2) * 180 / Math.PI + 360) % 360);
+              newStatus = 'EXECUTING';
+            }
+          } else if (agent.targetPosition) {
+            const dx = agent.targetPosition[0] - agent.position[0];
+            const dy = agent.targetPosition[1] - agent.position[1];
+            const dist = Math.hypot(dx, dy);
+
+            if (dist > 4) {
+              const step = Math.min(dist, speed);
+              newPos = [
+                agent.position[0] + (dx / dist) * step,
+                agent.position[1] + (dy / dist) * step,
+              ];
+              heading = Math.round((Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360);
+              newStatus = 'TRAVERSING';
+            } else {
               newStatus = 'EXECUTING';
             }
           }
 
-          // Battery slow drain
-          const newBattery = Math.max(0, agent.health.battery - 0.015 * simSpeed);
+          // Battery drain based on domain
+          const drainRate = agent.domain === 'GROUND_UGV' ? 0.005 : agent.domain === 'AIR_FIXED_WING' ? 0.012 : 0.018;
+          const newBattery = Math.max(0, agent.health.battery - drainRate * simSpeed);
 
           // Breadcrumbs
           const newBreadcrumbs = [...agent.breadcrumbs];
@@ -558,6 +784,7 @@ export function useSwarmSimulation() {
             ...agent,
             position: newPos,
             status: newStatus,
+            headingDeg: heading,
             health: { ...agent.health, battery: newBattery },
             breadcrumbs: newBreadcrumbs,
           };
@@ -573,15 +800,14 @@ export function useSwarmSimulation() {
             if (assigned && assigned.status === 'EXECUTING' && assigned.currentTaskId === task.id) {
               const newProgress = Math.min(1, task.progress + (0.04 * simSpeed));
               if (newProgress >= 1) {
-                addLog(`Task ${task.id} (${task.type}) completed by ${assigned.id}!`);
-                // Release task from agent
+                addLog(`MISSION SUCCESS: Task ${task.id} (${task.type}) fulfilled by ${assigned.callsign}!`);
                 assigned.bundle = assigned.bundle.filter((id) => id !== task.id);
                 assigned.path = assigned.path.filter((id) => id !== task.id);
                 assigned.currentTaskId = null;
                 assigned.targetPosition = null;
                 assigned.status = 'IDLE';
 
-                // Look for next task in path whose prerequisites are met
+                // Next task in path
                 for (const nextId of assigned.path) {
                   const nt = prevTasks.find((t) => t.id === nextId);
                   if (nt && nt.status !== 'COMPLETED') {
@@ -603,160 +829,67 @@ export function useSwarmSimulation() {
           });
         });
 
-        // Advance simulation tick
-        tickRef.current++;
-
-        // Periodic Black Box Snapshot
-        if (tickRef.current % 10 === 0) {
-          setBlackBoxSnapshots((prev) => {
-            const snap: BlackBoxSnapshot = {
-              timestamp: Date.now(),
-              tick: tickRef.current,
-              agents: JSON.parse(JSON.stringify(nextAgents)),
-              tasks: JSON.parse(JSON.stringify(tasksRef.current)),
-              commLinks: [...commLinks],
-              event: null,
-            };
-            return [...prev, snap].slice(-120);
-          });
-        }
-
-        // Periodic MAVLink Telemetry Generator
-        if (tickRef.current % 4 === 0) {
-          const movingAgent = nextAgents.find((a) => a.status === 'TRAVERSING' || a.status === 'EXECUTING') || nextAgents[0];
-          if (movingAgent) {
-            const pkt: MavlinkPacket = {
-              timestamp: new Date().toISOString().substring(11, 23),
-              agentId: movingAgent.id,
-              msgType: movingAgent.status === 'EXECUTING' 
-                ? 'STATUSTEXT'
-                : 'SET_POSITION_TARGET_LOCAL_NED',
-              seq: tickRef.current,
-              payload: movingAgent.status === 'EXECUTING'
-                ? { severity: 6, text: `Executing payload for task ${movingAgent.currentTaskId}` }
-                : {
-                    x: Math.round(movingAgent.position[0]),
-                    y: Math.round(movingAgent.position[1]),
-                    z: -15.0,
-                    vx: Math.round((Math.random() * 2 - 1) * 10) / 10,
-                    vy: Math.round((Math.random() * 2 - 1) * 10) / 10,
-                    vz: 0.0,
-                    yaw: Math.round(Math.random() * 360),
-                  },
-            };
-            setMavlinkPackets((prev) => [pkt, ...prev].slice(0, 35));
-          }
-        }
-
-        // Periodic Byzantine Telemetry Spoof Detection (UWB Trilateration Residuals)
-        if (tickRef.current % 10 === 0) {
-          nextAgents.forEach((agent) => {
-            const byz = byzantineStateRef.current.byzantineAgents[agent.id];
-            if (byz && byz.attack === 'TELEMETRY_SPOOF' && byz.status !== 'QUARANTINED' && byz.status !== 'EJECTED') {
-              setTimeout(() => {
-                setByzantineState((prev) => {
-                  const ag = prev.byzantineAgents[agent.id];
-                  if (!ag) return prev;
-                  const newTrust = Math.max(0, ag.trustScore - 25);
-                  const newStatus = newTrust <= 20 ? 'EJECTED' : newTrust <= 50 ? 'SUSPECT' : 'TRUSTED';
-                  return {
-                    ...prev,
-                    spoofedVectorsMitigated: prev.spoofedVectorsMitigated + 1,
-                    byzantineAgents: {
-                      ...prev.byzantineAgents,
-                      [agent.id]: {
-                        ...ag,
-                        trustScore: newTrust,
-                        status: newStatus,
-                        violations: [...ag.violations, `Tick ${tickRef.current}: UWB residual error Δ=28.4m > 5.0m threshold`].slice(-4),
-                      },
-                    },
-                  };
-                });
-              }, 0);
-            }
-          });
-        }
-
-        // Periodic ATAK Cursor-on-Target (CoT) Event Stream Generator
-        if (tickRef.current % 4 === 0) {
-          const events: CotEvent[] = nextAgents.map((ag) => {
-            const callsign = agentCallsignMap[ag.id] || `VIPER-0${ag.id.replace('A', '')}`;
-            const geo = canvasToGeo(ag.position[0], ag.position[1]);
-            const speedKts = Math.round(ag.speed * ag.health.propulsion * 0.54);
-            const headingDeg = Math.round((Math.atan2(ag.position[1] - ag.homeBase[1], ag.position[0] - ag.homeBase[0]) * 180 / Math.PI + 360) % 360);
-            const now = new Date();
-
-            return {
-              id: `COT-${ag.id}-${tickRef.current}`,
-              uid: `SWARMOS-${callsign}`,
-              type: 'a-f-A-M-F-Q',
-              callsign,
-              lat: geo.lat,
-              lon: geo.lon,
-              hae: 125.0,
-              speedKts,
-              headingDeg,
-              time: now.toISOString(),
-              stale: new Date(now.getTime() + 20000).toISOString(),
-              batteryPct: Math.round(ag.health.battery),
-              assignedTaskId: ag.currentTaskId,
-              rawXml: generateCotXml(ag, callsign),
-            };
-          });
-
-          setCotEvents(events);
-          setTakServerStatus((prev) => ({
-            ...prev,
-            packetsOut: prev.packetsOut + events.length,
-            lastHeartbeat: new Date().toISOString().substring(11, 19),
-          }));
-        }
-
         return nextAgents;
       });
-
-      // Update KPIs
-      setTasks((currTasks) => {
-        setAgents((currAgents) => {
-          const completed = currTasks.filter((t) => t.status === 'COMPLETED').length;
-          const operational = currAgents.filter((a) => a.health.propulsion > 0.1).length;
-          const avgBat = currAgents.reduce((acc, a) => acc + a.health.battery, 0) / currAgents.length;
-
-          setKpis({
-            taskCompletionPct: (completed / currTasks.length) * 100,
-            completedTasks: completed,
-            totalTasks: currTasks.length,
-            avgConsensusMs: 18.2,
-            resilienceFactorPct: operational === currAgents.length ? 100 : 96.4,
-            operationalFleetPct: (operational / currAgents.length) * 100,
-            totalMeshPackets: 86 + Math.floor(Math.random() * 4),
-            totalRewardEarned: completed * 120,
-            avgBatteryPct: avgBat,
-          });
-          return currAgents;
-        });
-        return currTasks;
-      });
-    }, 50);
+    }, 100);
 
     return () => clearInterval(interval);
   }, [isRunning, simSpeed, addLog]);
 
-  // Failure Injections
-  const injectMotorFailure = () => {
-    setAgents((prev) => {
-      const copy = [...prev];
-      const target = copy[0]; // Agent A1
-      target.health.propulsion = 0.0;
-      target.status = 'FAILED';
-      addLog(`CRITICAL FAILURE: Agent ${target.id} rotor failure! Orphaned tasks: [${target.bundle.join(', ')}]`);
+  // Periodic CoT event emission
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const newCotEvents: CotEvent[] = agents.map((agent) => {
+        const geo = canvasToGeo(agent.position[0], agent.position[1]);
+        const callsign = agentCallsignMap[agent.id] || agent.id;
+        const rawXml = generateCotXml(agent, callsign);
+        return {
+          id: `COT-${agent.id}-${Date.now()}`,
+          uid: `SWARMOS-${callsign.split(' ')[0]}`,
+          type: agent.domain === 'AIR_FIXED_WING' ? 'a-f-A-M-F-F' : agent.domain === 'GROUND_UGV' ? 'a-f-G-U-C-I' : agent.domain === 'SURFACE_USV' ? 'a-f-S-X-M' : 'a-f-A-M-F-Q',
+          callsign: callsign.split(' ')[0],
+          lat: geo.lat,
+          lon: geo.lon,
+          hae: agent.altitudeM,
+          speedKts: Math.round(agent.speed * agent.health.propulsion * 0.54),
+          headingDeg: agent.headingDeg || 45,
+          time: new Date().toISOString(),
+          stale: new Date(Date.now() + 25000).toISOString(),
+          batteryPct: Math.round(agent.health.battery),
+          assignedTaskId: agent.currentTaskId,
+          rawXml,
+        };
+      });
 
-      // Tasks become orphaned, trigger dynamic replan
-      const orphaned = [...target.bundle];
-      target.bundle = [];
-      target.path = [];
-      target.targetPosition = null;
+      setCotEvents(newCotEvents);
+      setTakServerStatus((prev) => ({
+        ...prev,
+        packetsOut: prev.packetsOut + newCotEvents.length,
+        lastHeartbeat: new Date().toISOString().substring(11, 19),
+      }));
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [agents]);
+
+  // Failure and threat injection
+  const injectMotorFailure = (agentId: string) => {
+    setAgents((prev) => {
+      const copy = prev.map((a) => {
+        if (a.id === agentId) {
+          return {
+            ...a,
+            health: { ...a.health, propulsion: 0.0 },
+            status: 'FAILED' as const,
+          };
+        }
+        return a;
+      });
+
+      const failedAgent = copy.find((a) => a.id === agentId);
+      const orphaned = failedAgent ? [...failedAgent.bundle] : [];
+
+      addLog(`CATASTROPHIC FAILURE: ${failedAgent?.callsign || agentId} lost propulsion.`);
 
       // Unassign tasks
       setTasks((tPrev) => {
@@ -767,7 +900,6 @@ export function useSwarmSimulation() {
           return t;
         });
 
-        // Run emergency CBBA auction
         setTimeout(() => {
           const res = runCBBAAuction(copy, tCopy);
           addLog(`DYNAMIC REPLANNER: Orphaned tasks [${orphaned.join(', ')}] re-allocated across surviving fleet in 14.8 ms.`);
@@ -806,9 +938,80 @@ export function useSwarmSimulation() {
     addLog(`THREAT INJECTED: Pop-up Surface-to-Air Missile Radar Threat Zone detected at [720, 160].`);
   };
 
+  const dockAgentToUgv = (agentId: string, ugvId: string) => {
+    const ugv = agents.find((a) => a.id === ugvId);
+    if (!ugv) return;
+    setAgents((prev) =>
+      prev.map((a) => {
+        if (a.id === agentId) {
+          return {
+            ...a,
+            targetPosition: ugv.position,
+            status: 'RETURNING' as const,
+          };
+        }
+        return a;
+      })
+    );
+    addLog(`MUM-T COMMAND: Ordered ${agentCallsignMap[agentId] || agentId} to rendezvous with ${ugv.callsign} for induction recharge.`);
+  };
+
+  const setSdrRadioModel = (model: SdrMeshState['radioModel']) => {
+    setSdrMeshState((prev) => ({
+      ...prev,
+      radioModel: model,
+      txPowerDbm: model === 'SILVUS_STREAMCASTER_4400' ? 33.0 : model === 'TRELLISWARE_TW950' ? 30.0 : 32.0,
+      beamformingGainDbi: model === 'SILVUS_STREAMCASTER_4400' ? 6.5 : 4.2,
+    }));
+    addLog(`SDR MANET: Radio waveform switched to ${model}.`);
+  };
+
+  const toggleSdrCryptoSuite = () => {
+    setSdrMeshState((prev) => {
+      const nextSuite = prev.cryptoSuite === 'CHACHA20_POLY1305' ? 'CRYSTALS_KYBER_PQ' : 'CHACHA20_POLY1305';
+      addLog(`ZERO-TRUST: Swapped session cipher to ${nextSuite}.`);
+      return {
+        ...prev,
+        cryptoSuite: nextSuite,
+        activeKeyEpoch: prev.activeKeyEpoch + 1,
+        epochExpiresSec: 60,
+      };
+    });
+  };
+
+  const triggerEdgeLlmInference = (customPrompt?: string) => {
+    const prompt = customPrompt || edgeLlmState.lastEdgePrompt;
+    setEdgeLlmState((prev) => ({ ...prev, isInferring: true, lastEdgePrompt: prompt }));
+    addLog(`JETSON ORIN INFERENCE: Running offline INT4 TensorRT-LLM on prompt: "${prompt.slice(0, 40)}..."`);
+
+    setTimeout(() => {
+      const generatedPlan = `[JETSON ORIN TENSORRT-LLM MISSION DIRECTIVE]
+Model: ${edgeLlmState.model} | HW: ${edgeLlmState.targetHardware}
+Zero-Cloud Native Execution | Inference Latency: 38ms | Throughput: 79.2 tok/s
+
+Autonomous Re-planning Decision:
+1. Threat Deconfliction: Re-route VIPER-01 (Fixed-Wing Scout) to orbit waypoint (410, 120), outside jamming envelope.
+2. Dynamic Payload Matching:
+   - Task T2 (RESCUE) assigned to VIPER-03 (Cargo Quad, 260Wh) due to HEAVY_CARGO requirement.
+   - Task T4 (SURVEIL) assigned to VIPER-04 (Lidar Quad, 180Wh) due to LIDAR_3D requirement.
+3. Ground Anchor Maneuver: Advance TITAN-01 (UGV Hub) to Grid (320, 280) to bridge tactical SDR link with NAUTILUS-01 (USV).
+4. Inductive Dock-Recharge: Scheduled multirotor battery turnaround at TITAN-01 Mobile Bay.
+5. Cryptographic Nonce: ChaCha20-Poly1305 epoch key ${edgeLlmState.promptTokens + 104} verified.`;
+
+      setEdgeLlmState((prev) => ({
+        ...prev,
+        isInferring: false,
+        lastEdgePlan: generatedPlan,
+        promptTokens: 350 + Math.floor(Math.random() * 30),
+        completionTokens: 140 + Math.floor(Math.random() * 20),
+      }));
+      addLog('JETSON ORIN INFERENCE: Mission plan generated and executed across swarm.');
+      triggerAuction();
+    }, 600);
+  };
+
   const loadPresetMission = (prompt: string) => {
     addLog(`NVIDIA NEMOTRON INGESTION: Translating directive "${prompt.slice(0, 45)}..."`);
-    // Reset and distribute new tasks
     const newTasks: TaskEntity[] = [
       {
         id: 'T1',
@@ -821,6 +1024,7 @@ export function useSwarmSimulation() {
         assignedAgentId: null,
         progress: 0,
         description: 'Sweep priority sector and map terrain obstacles',
+        requiredPayload: 'FLIR_THERMAL',
       },
       {
         id: 'T2',
@@ -833,6 +1037,7 @@ export function useSwarmSimulation() {
         assignedAgentId: null,
         progress: 0,
         description: 'Deliver emergency drop at designated coordinates',
+        requiredPayload: 'HEAVY_CARGO',
       },
       {
         id: 'T3',
@@ -845,6 +1050,7 @@ export function useSwarmSimulation() {
         assignedAgentId: null,
         progress: 0,
         description: 'Electronic suppression of enemy emitter',
+        requiredPayload: 'SIGINT_DIRECTION_FINDER',
       },
       {
         id: 'T4',
@@ -857,6 +1063,7 @@ export function useSwarmSimulation() {
         assignedAgentId: null,
         progress: 0,
         description: 'Continuous aerial perimeter surveillance',
+        requiredPayload: 'LIDAR_3D',
       },
     ];
 
@@ -874,7 +1081,7 @@ export function useSwarmSimulation() {
     setAgents(initialAgents);
     setTasks(initialTasks);
     setThreatZones(initialThreats);
-    addLog('Simulation reset to nominal configuration.');
+    addLog('Simulation reset to nominal multi-domain configuration.');
     setTimeout(() => {
       triggerAuction();
     }, 100);
@@ -890,6 +1097,14 @@ export function useSwarmSimulation() {
       const decay = Math.pow(0.95, arrival * task.urgencyWeight);
       const marginal = isFailed ? 0 : Math.max(0, task.baseReward * decay - dist * 0.05);
 
+      let reason: string | undefined = undefined;
+      if (isFailed) reason = 'PROPULSION FAILED';
+      else if (task.requiredPayload && !a.payloads.includes(task.requiredPayload)) {
+        reason = `LACKS REQUIRED PAYLOAD: ${task.requiredPayload}`;
+      } else if (task.requiredDomain && a.domain !== task.requiredDomain) {
+        reason = `DOMAIN MISMATCH: Needs ${task.requiredDomain}`;
+      }
+
       return {
         agentId: a.id,
         distanceM: Math.round(dist),
@@ -897,22 +1112,18 @@ export function useSwarmSimulation() {
         marginalBid: Math.round(marginal * 10) / 10,
         capacityLeft: Math.max(0, a.maxBundleSize - a.bundle.length),
         isWinner: a.id === task.assignedAgentId,
-        reason: isFailed ? 'PROPULSION FAILED' : undefined,
+        reason,
       };
     });
 
-    // Sort by marginal bid descending
     biddingMatrix.sort((a, b) => b.marginalBid - a.marginalBid);
 
     const winner = task.assignedAgentId;
+    const winnerAgent = agents.find((a) => a.id === winner);
     const explanation = winner
-      ? `Task ${task.id} (${task.type}) was awarded to Drone ${winner} because it offered the highest marginal utility score of ${
+      ? `Task ${task.id} (${task.type}) was awarded to ${winnerAgent?.callsign || winner} because it satisfies payload requirements (${task.requiredPayload || 'GENERIC'}) and offered the highest marginal utility score of ${
           biddingMatrix.find((b) => b.agentId === winner)?.marginalBid || 0
-        } pts. Its proximity (${
-          biddingMatrix.find((b) => b.agentId === winner)?.distanceM || 0
-        }m) minimized temporal reward decay (λ = 0.95), beating neighboring bids by a margin of ${(
-          (biddingMatrix[0]?.marginalBid || 0) - (biddingMatrix[1]?.marginalBid || 0)
-        ).toFixed(1)} points.`
+        } pts.`
       : 'Task is currently unassigned due to agent capacity limits or hostile jamming interference.';
 
     setExplainData({
@@ -1000,7 +1211,7 @@ ${cotEvents.map((e) => e.rawXml).join('\n\n')}
   <targets count="${tasks.length}">
 ${tasks.map((t) => {
   const geo = canvasToGeo(t.position[0], t.position[1]);
-  return `    <target id="${t.id}" type="${t.type}" lat="${geo.lat}" lon="${geo.lon}" status="${t.status}" assignedTo="${t.assignedAgentId || 'NONE'}"/>`;
+  return `    <target id="${t.id}" type="${t.type}" lat="${geo.lat}" lon="${geo.lon}" status="${t.status}" assignedTo="${t.assignedAgentId || 'NONE'}" requiredPayload="${t.requiredPayload || 'NONE'}"/>`;
 }).join('\n')}
   </targets>
 </missionPackage>`;
@@ -1038,6 +1249,8 @@ ${tasks.map((t) => {
     tacticalMode,
     cotEvents,
     takServerStatus,
+    sdrMeshState,
+    edgeLlmState,
     setSelectedAgentId,
     setSelectedTaskId,
     setIsRunning,
@@ -1055,6 +1268,10 @@ ${tasks.map((t) => {
     injectByzantineAttack,
     remediateByzantine,
     exportAtakMissionPackage,
+    dockAgentToUgv,
+    setSdrRadioModel,
+    toggleSdrCryptoSuite,
+    triggerEdgeLlmInference,
     scrubToSnapshot: setActiveScrubbedSnapshot,
   };
 }
