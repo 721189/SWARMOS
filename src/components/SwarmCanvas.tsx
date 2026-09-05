@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { 
   AgentEntity, 
   TaskEntity, 
@@ -12,7 +12,18 @@ import {
   SandboxTool
 } from '../types';
 import { agentCallsignMap } from '../hooks/useSwarmSimulation';
-import { Radio, Compass, Eye, ShieldAlert, Layers, BatteryCharging, Wind, Mountain, Crosshair } from 'lucide-react';
+import { Radio, Compass, Eye, ShieldAlert, Layers, BatteryCharging, Wind, Mountain, Crosshair, Zap, Unlock, Move, AlertTriangle } from 'lucide-react';
+
+interface DragState {
+  active: boolean;
+  type: 'TASK' | 'AGENT';
+  sourceId: string;
+  originPos: [number, number];
+  currentPos: [number, number];
+  hoveredTargetId: string | null;
+  hoveredTargetType: 'AGENT' | 'TASK' | null;
+  dragDistance: number;
+}
 
 interface SwarmCanvasProps {
   agents: AgentEntity[];
@@ -37,6 +48,9 @@ interface SwarmCanvasProps {
   onSelectAgent: (id: string | null) => void;
   onSelectTask: (id: string | null) => void;
   onCanvasClickWithTool?: (pos: [number, number], tool: SandboxTool) => void;
+  onManualReroute?: (taskId: string, targetAgentId: string) => void;
+  onManualMoveTask?: (taskId: string, pos: [number, number]) => void;
+  onClearTaskOverride?: (taskId: string) => void;
 }
 
 export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
@@ -58,9 +72,63 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
   onSelectAgent,
   onSelectTask,
   onCanvasClickWithTool,
+  onManualReroute,
+  onManualMoveTask,
+  onClearTaskOverride,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [dragState, setDragState] = useState<DragState>({
+    active: false,
+    type: 'TASK',
+    sourceId: '',
+    originPos: [0, 0],
+    currentPos: [0, 0],
+    hoveredTargetId: null,
+    hoveredTargetType: null,
+    dragDistance: 0,
+  });
 
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const showToast = useCallback((msg: string) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToastMessage(msg);
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastMessage(null);
+    }, 4500);
+  }, []);
+
+  const overriddenTasks = tasks.filter((t) => t.isOperatorOverride && t.status !== 'COMPLETED');
+
+  // Convert mouse/touch event into canvas pixel coordinate system
+  const getCanvasCoordinates = useCallback((e: React.MouseEvent | React.TouchEvent | MouseEvent | TouchEvent): [number, number] | null => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    let clientX = 0;
+    let clientY = 0;
+
+    if ('touches' in e && e.touches.length > 0) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else if ('changedTouches' in e && e.changedTouches.length > 0) {
+      clientX = e.changedTouches[0].clientX;
+      clientY = e.changedTouches[0].clientY;
+    } else if ('clientX' in e) {
+      clientX = (e as React.MouseEvent).clientX;
+      clientY = (e as React.MouseEvent).clientY;
+    } else {
+      return null;
+    }
+
+    return [(clientX - rect.left) * scaleX, (clientY - rect.top) * scaleY];
+  }, []);
+
+  // Main Canvas Rendering Loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -88,8 +156,8 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(width, y);
-      ctx.stroke();
     }
+    ctx.stroke();
 
     // Grid coordinates
     ctx.fillStyle = '#263852';
@@ -348,7 +416,7 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
       }
     });
 
-    // 5. Draw Tasks with Precedence DAG & Required Payloads
+    // 5. Draw Tasks with Precedence DAG & Operator Override Highlighting
     tasks.forEach((task) => {
       if (task.prerequisites && task.prerequisites.length > 0) {
         task.prerequisites.forEach((prereqId) => {
@@ -368,14 +436,39 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
       }
     });
 
+    // Operator Override Flight Trajectories
+    tasks.forEach((task) => {
+      if (task.isOperatorOverride && task.assignedAgentId && task.status !== 'COMPLETED') {
+        const ag = agents.find((a) => a.id === task.assignedAgentId);
+        if (ag && ag.status !== 'FAILED') {
+          // Tactical animated laser guidance line
+          ctx.strokeStyle = 'rgba(245, 158, 11, 0.75)';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([6, 3]);
+          ctx.beginPath();
+          ctx.moveTo(ag.position[0], ag.position[1]);
+          ctx.lineTo(task.position[0], task.position[1]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          const midX = (ag.position[0] + task.position[0]) / 2;
+          const midY = (ag.position[1] + task.position[1]) / 2;
+          ctx.fillStyle = '#f59e0b';
+          ctx.font = 'bold 8px monospace';
+          ctx.fillText('⚡ OPERATOR DIRECTIVE', midX - 45, midY - 6);
+        }
+      }
+    });
+
     tasks.forEach((task) => {
       const [tx, ty] = task.position;
       const isSelected = selectedTaskId === task.id;
+      const isOverridden = !!task.isOperatorOverride;
 
       let color = '#94a3b8';
       if (task.status === 'COMPLETED') color = '#22c55e';
       else if (task.status === 'IN_PROGRESS') color = '#38bdf8';
-      else if (task.status === 'ASSIGNED') color = '#fbbf24';
+      else if (task.status === 'ASSIGNED') color = isOverridden ? '#f59e0b' : '#fbbf24';
 
       const hasUnmetPrereqs = task.prerequisites?.some((pId) => {
         const pt = tasks.find((t) => t.id === pId);
@@ -386,8 +479,20 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
         color = '#64748b';
       }
 
+      // Operator Override Glowing Halo
+      if (isOverridden && task.status !== 'COMPLETED') {
+        const pulse = 1 + 0.15 * Math.sin(Date.now() / 250);
+        ctx.strokeStyle = 'rgba(245, 158, 11, 0.8)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.arc(tx, ty, 16 * pulse, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
       if (isSelected) {
-        ctx.strokeStyle = '#38bdf8';
+        ctx.strokeStyle = isOverridden ? '#f59e0b' : '#38bdf8';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(tx, ty, 22, 0, Math.PI * 2);
@@ -408,10 +513,10 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
       } else {
         ctx.fillStyle = color;
         ctx.beginPath();
-        ctx.arc(tx, ty, 6, 0, Math.PI * 2);
+        ctx.arc(tx, ty, 6.5, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = isOverridden ? '#f59e0b' : '#ffffff';
+        ctx.lineWidth = isOverridden ? 2 : 1.5;
         ctx.stroke();
       }
 
@@ -419,7 +524,12 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
       ctx.font = 'bold 11px monospace';
       ctx.fillText(`${task.id}:${task.type}`, tx + 16, ty - 2);
 
-      if (hasUnmetPrereqs && task.status !== 'COMPLETED') {
+      if (isOverridden && task.status !== 'COMPLETED') {
+        ctx.fillStyle = '#f59e0b';
+        ctx.font = 'bold 9px monospace';
+        const cSign = agentCallsignMap[task.assignedAgentId || ''] || task.assignedAgentId;
+        ctx.fillText(`⚡ OVERRIDE: ${cSign?.split(' ')[0] || 'LOCKED'}`, tx + 16, ty + 10);
+      } else if (hasUnmetPrereqs && task.status !== 'COMPLETED') {
         ctx.fillStyle = '#fbbf24';
         ctx.font = '9px monospace';
         ctx.fillText(`🔒 REQ: ${task.prerequisites?.join(', ')}`, tx + 16, ty + 10);
@@ -476,6 +586,8 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
           ? 'rgba(239, 68, 68, 0.2)'
           : isFailed
           ? 'rgba(239, 68, 68, 0.15)'
+          : agent.isManualOverride
+          ? 'rgba(245, 158, 11, 0.3)'
           : 'rgba(56, 189, 248, 0.25)';
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -488,8 +600,12 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
 
       // Path line to current target
       if (agent.targetPosition && !isFailed && !isQuarantined) {
-        ctx.strokeStyle = isRecharging ? 'rgba(16, 185, 129, 0.5)' : 'rgba(250, 204, 21, 0.4)';
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = isRecharging 
+          ? 'rgba(16, 185, 129, 0.5)' 
+          : agent.isManualOverride
+          ? 'rgba(245, 158, 11, 0.7)'
+          : 'rgba(250, 204, 21, 0.4)';
+        ctx.lineWidth = agent.isManualOverride ? 2 : 1.5;
         ctx.setLineDash([4, 4]);
         ctx.beginPath();
         ctx.moveTo(ax, ay);
@@ -540,7 +656,15 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
       const rad = ((agent.headingDeg || 0) * Math.PI) / 180;
       ctx.rotate(rad);
 
-      const themeColor = isQuarantined ? '#ef4444' : isFailed ? '#ef4444' : isJammed ? '#a855f7' : '#38bdf8';
+      const themeColor = isQuarantined 
+        ? '#ef4444' 
+        : isFailed 
+        ? '#ef4444' 
+        : isJammed 
+        ? '#a855f7' 
+        : agent.isManualOverride 
+        ? '#f59e0b' 
+        : '#38bdf8';
 
       if (agent.domain === 'AIR_FIXED_WING') {
         // Delta Swept-Wing Geometry
@@ -623,9 +747,9 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
       // Status text
       ctx.fillStyle = isRecharging 
         ? '#34d399' 
-        : isQuarantined ? '#ef4444' : isFailed ? '#ef4444' : isJammed ? '#c084fc' : '#38bdf8';
+        : isQuarantined ? '#ef4444' : isFailed ? '#ef4444' : isJammed ? '#c084fc' : agent.isManualOverride ? '#f59e0b' : '#38bdf8';
       ctx.font = '8px monospace';
-      ctx.fillText(agent.status, ax - 16, ay + 24);
+      ctx.fillText(agent.isManualOverride ? `${agent.status} (OVERRIDE)` : agent.status, ax - 24, ay + 24);
 
       // Dubins & Kinematic flight telemetry
       if (agent.domain === 'AIR_FIXED_WING') {
@@ -686,50 +810,320 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
       ctx.font = '7px monospace';
       ctx.fillText(`${windVector.directionDeg}° • T:${windVector.turbulencePct}%`, hudX - 22, hudY + r + 23);
     }
-  }, [agents, tasks, obstacles, threatZones, commLinks, selectedAgentId, selectedTaskId, byzantineState, tacticalMode, terrainRidges, relayLinks, windVector, redTeamThreats]);
 
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const clickX = (e.clientX - rect.left) * scaleX;
-    const clickY = (e.clientY - rect.top) * scaleY;
+    // 8. ACTIVE DRAG & DROP TACTICAL HUD OVERLAY
+    if (dragState.active) {
+      const [ox, oy] = dragState.originPos;
+      const [cx, cy] = dragState.currentPos;
+      const distPx = Math.hypot(cx - ox, cy - oy);
 
+      // A. Dynamic Laser Guidance Vector
+      const grad = ctx.createLinearGradient(ox, oy, cx, cy);
+      grad.addColorStop(0, 'rgba(245, 158, 11, 0.9)'); // amber origin
+      grad.addColorStop(1, 'rgba(56, 189, 248, 0.95)'); // cyan cursor
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(ox, oy);
+      ctx.lineTo(cx, cy);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // B. Origin Marker Pulse
+      ctx.fillStyle = 'rgba(245, 158, 11, 0.3)';
+      ctx.beginPath();
+      ctx.arc(ox, oy, 14, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // C. Target Lock Reticle (if hovering over valid agent or task drop target)
+      if (dragState.hoveredTargetId) {
+        let targetX = 0;
+        let targetY = 0;
+        let targetLabel = '';
+        let targetCallsign = '';
+
+        if (dragState.hoveredTargetType === 'AGENT') {
+          const hoveredAgent = agents.find((a) => a.id === dragState.hoveredTargetId);
+          if (hoveredAgent) {
+            [targetX, targetY] = hoveredAgent.position;
+            targetCallsign = agentCallsignMap[hoveredAgent.id] || hoveredAgent.id;
+            targetLabel = `⚡ DROP TO FORCE RE-ROUTE (${targetCallsign.split(' ')[0]}) [CBBA BYPASS]`;
+          }
+        } else if (dragState.hoveredTargetType === 'TASK') {
+          const hoveredTask = tasks.find((t) => t.id === dragState.hoveredTargetId);
+          if (hoveredTask) {
+            [targetX, targetY] = hoveredTask.position;
+            targetLabel = `⚡ DROP TO DIRECT AGENT TO TASK ${hoveredTask.id} (${hoveredTask.type})`;
+          }
+        }
+
+        if (targetX > 0 && targetY > 0) {
+          // Pulsing lock ring
+          const ringPulse = 28 + 4 * Math.sin(Date.now() / 150);
+          ctx.strokeStyle = '#10b981';
+          ctx.lineWidth = 2.5;
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          ctx.arc(targetX, targetY, ringPulse, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          // 4 Corner Targeting Brackets
+          const bSize = 14;
+          const bDist = 26;
+          ctx.strokeStyle = '#34d399';
+          ctx.lineWidth = 2;
+
+          // Top-Left
+          ctx.beginPath();
+          ctx.moveTo(targetX - bDist, targetY - bDist + bSize);
+          ctx.lineTo(targetX - bDist, targetY - bDist);
+          ctx.lineTo(targetX - bDist + bSize, targetY - bDist);
+          ctx.stroke();
+
+          // Top-Right
+          ctx.beginPath();
+          ctx.moveTo(targetX + bDist - bSize, targetY - bDist);
+          ctx.lineTo(targetX + bDist, targetY - bDist);
+          ctx.lineTo(targetX + bDist, targetY - bDist + bSize);
+          ctx.stroke();
+
+          // Bottom-Left
+          ctx.beginPath();
+          ctx.moveTo(targetX - bDist, targetY + bDist - bSize);
+          ctx.lineTo(targetX - bDist, targetY + bDist);
+          ctx.lineTo(targetX - bDist + bSize, targetY + bDist);
+          ctx.stroke();
+
+          // Bottom-Right
+          ctx.beginPath();
+          ctx.moveTo(targetX + bDist - bSize, targetY + bDist);
+          ctx.lineTo(targetX + bDist, targetY + bDist);
+          ctx.lineTo(targetX + bDist, targetY + bDist - bSize);
+          ctx.stroke();
+
+          // Floating Target Action Pill
+          const textWidth = ctx.measureText(targetLabel).width;
+          ctx.fillStyle = 'rgba(6, 78, 59, 0.9)';
+          ctx.strokeStyle = '#10b981';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.roundRect(targetX - textWidth / 2 - 12, targetY - 48, textWidth + 24, 22, 6);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = '#6ee7b7';
+          ctx.font = 'bold 9px monospace';
+          ctx.fillText(targetLabel, targetX - textWidth / 2, targetY - 34);
+        }
+      }
+
+      // D. Floating Cursor Tooltip
+      const cursorText = dragState.type === 'TASK' 
+        ? `[TASK ${dragState.sourceId}] → Drop on Drone to Re-route | Drop on map to reposition`
+        : `[AGENT ${dragState.sourceId}] → Drop on Task to direct flight`;
+      const estArrivalSec = (distPx / 60).toFixed(1);
+
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+      ctx.strokeStyle = dragState.hoveredTargetId ? '#10b981' : '#38bdf8';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.roundRect(cx + 14, cy - 28, 230, 36, 6);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = 'bold 9px monospace';
+      ctx.fillText(cursorText, cx + 22, cy - 14);
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '8px monospace';
+      ctx.fillText(`RANGE: ${(distPx * 1.5).toFixed(0)}m • EST FLIGHT: ${estArrivalSec}s`, cx + 22, cy - 2);
+
+      // Cursor pointer dot
+      ctx.fillStyle = '#38bdf8';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  }, [agents, tasks, obstacles, threatZones, commLinks, selectedAgentId, selectedTaskId, byzantineState, tacticalMode, terrainRidges, relayLinks, windVector, redTeamThreats, dragState]);
+
+  // Pointer & Touch Handlers for Drag & Drop
+  const handlePointerDown = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    const coords = getCanvasCoordinates(e);
+    if (!coords) return;
+    const [clickX, clickY] = coords;
+
+    // If sandbox tool is active (and not inspect), defer to sandbox tool handler
     if (activeSandboxTool && activeSandboxTool !== 'INSPECT' && onCanvasClickWithTool) {
       onCanvasClickWithTool([clickX, clickY], activeSandboxTool);
       return;
     }
 
-    for (const agent of agents) {
-      const d = Math.hypot(agent.position[0] - clickX, agent.position[1] - clickY);
-      if (d <= 22) {
-        onSelectAgent(agent.id);
-        return;
-      }
-    }
-
+    // 1. Check if clicked near a task (Task Grab)
     for (const task of tasks) {
       const d = Math.hypot(task.position[0] - clickX, task.position[1] - clickY);
-      if (d <= 18) {
+      if (d <= 20) {
+        setDragState({
+          active: true,
+          type: 'TASK',
+          sourceId: task.id,
+          originPos: [...task.position],
+          currentPos: [clickX, clickY],
+          hoveredTargetId: null,
+          hoveredTargetType: null,
+          dragDistance: 0,
+        });
         onSelectTask(task.id);
         return;
       }
     }
 
+    // 2. Check if clicked near an agent (Agent Grab)
+    for (const agent of agents) {
+      const d = Math.hypot(agent.position[0] - clickX, agent.position[1] - clickY);
+      if (d <= 24) {
+        setDragState({
+          active: true,
+          type: 'AGENT',
+          sourceId: agent.id,
+          originPos: [...agent.position],
+          currentPos: [clickX, clickY],
+          hoveredTargetId: null,
+          hoveredTargetType: null,
+          dragDistance: 0,
+        });
+        onSelectAgent(agent.id);
+        return;
+      }
+    }
+
+    // Clicked empty space
     onSelectAgent(null);
     onSelectTask(null);
   };
 
+  const handlePointerMove = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!dragState.active) return;
+    const coords = getCanvasCoordinates(e);
+    if (!coords) return;
+    const [currX, currY] = coords;
+    const distFromOrigin = Math.hypot(currX - dragState.originPos[0], currY - dragState.originPos[1]);
+
+    let targetId: string | null = null;
+    let targetType: 'AGENT' | 'TASK' | null = null;
+
+    if (dragState.type === 'TASK') {
+      // Find closest agent within snap radius (38px)
+      let minDist = 38;
+      for (const agent of agents) {
+        const d = Math.hypot(agent.position[0] - currX, agent.position[1] - currY);
+        if (d < minDist) {
+          minDist = d;
+          targetId = agent.id;
+          targetType = 'AGENT';
+        }
+      }
+    } else if (dragState.type === 'AGENT') {
+      // Find closest task within snap radius (34px)
+      let minDist = 34;
+      for (const task of tasks) {
+        const d = Math.hypot(task.position[0] - currX, task.position[1] - currY);
+        if (d < minDist) {
+          minDist = d;
+          targetId = task.id;
+          targetType = 'TASK';
+        }
+      }
+    }
+
+    setDragState((prev) => ({
+      ...prev,
+      currentPos: [currX, currY],
+      hoveredTargetId: targetId,
+      hoveredTargetType: targetType,
+      dragDistance: distFromOrigin,
+    }));
+  };
+
+  const handlePointerUp = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!dragState.active) return;
+    const coords = getCanvasCoordinates(e);
+    const currX = coords ? coords[0] : dragState.currentPos[0];
+    const currY = coords ? coords[1] : dragState.currentPos[1];
+    const distFromOrigin = Math.hypot(currX - dragState.originPos[0], currY - dragState.originPos[1]);
+
+    if (dragState.type === 'TASK') {
+      if (dragState.hoveredTargetId && dragState.hoveredTargetType === 'AGENT') {
+        // Dropped Task directly onto Agent: Force manual operator re-routing!
+        if (onManualReroute) {
+          onManualReroute(dragState.sourceId, dragState.hoveredTargetId);
+          const cSign = agentCallsignMap[dragState.hoveredTargetId]?.split(' ')[0] || dragState.hoveredTargetId;
+          showToast(`⚡ OPERATOR OVERRIDE: Task ${dragState.sourceId} forcefully routed to ${cSign} (CBBA Bypassed)`);
+        }
+      } else if (distFromOrigin > 35) {
+        // Dropped Task onto open map: Reposition task coordinate
+        if (onManualMoveTask) {
+          onManualMoveTask(dragState.sourceId, [currX, currY]);
+          showToast(`📍 TASK RETARGETED: Task ${dragState.sourceId} relocated to (${Math.round(currX)}, ${Math.round(currY)})`);
+        }
+      }
+    } else if (dragState.type === 'AGENT') {
+      if (dragState.hoveredTargetId && dragState.hoveredTargetType === 'TASK') {
+        // Dropped Agent directly onto Task: Force manual operator re-routing!
+        if (onManualReroute) {
+          onManualReroute(dragState.hoveredTargetId, dragState.sourceId);
+          const cSign = agentCallsignMap[dragState.sourceId]?.split(' ')[0] || dragState.sourceId;
+          showToast(`⚡ OPERATOR OVERRIDE: ${cSign} dispatched directly to Task ${dragState.hoveredTargetId} (CBBA Bypassed)`);
+        }
+      }
+    }
+
+    // Reset drag state
+    setDragState({
+      active: false,
+      type: 'TASK',
+      sourceId: '',
+      originPos: [0, 0],
+      currentPos: [0, 0],
+      hoveredTargetId: null,
+      hoveredTargetType: null,
+      dragDistance: 0,
+    });
+  };
+
+  const handlePointerCancel = () => {
+    setDragState({
+      active: false,
+      type: 'TASK',
+      sourceId: '',
+      originPos: [0, 0],
+      currentPos: [0, 0],
+      hoveredTargetId: null,
+      hoveredTargetType: null,
+      dragDistance: 0,
+    });
+  };
+
   return (
-    <div className="relative w-full rounded-2xl overflow-hidden border border-slate-800 bg-[#0a0f1d] shadow-2xl">
+    <div className="relative w-full rounded-2xl overflow-hidden border border-slate-800 bg-[#0a0f1d] shadow-2xl select-none">
       {/* Top Overlay Controls */}
       <div className="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-auto z-10">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <span className="px-2.5 py-1 rounded-md text-[11px] font-mono font-bold bg-slate-900/90 text-sky-400 border border-slate-700/80 backdrop-blur-md flex items-center gap-1.5 shadow-sm">
             <span className="w-2 h-2 rounded-full bg-sky-400 animate-ping" />
             THEATER MAP (WGS-84)
+          </span>
+
+          <span className="px-2.5 py-1 rounded-md text-[10px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 backdrop-blur-md flex items-center gap-1.5 shadow-sm">
+            <Zap className="w-3 h-3 text-amber-400" />
+            <span>DRAG &amp; DROP RE-ROUTING ACTIVE</span>
           </span>
 
           {onToggleTacticalMode && (
@@ -763,10 +1157,17 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {overriddenTasks.length > 0 && (
+            <span className="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1.5 animate-pulse">
+              <AlertTriangle className="w-3 h-3 text-amber-400" />
+              {overriddenTasks.length} OVERRIDDEN {overriddenTasks.length === 1 ? 'TASK' : 'TASKS'}
+            </span>
+          )}
+
           {byzantineState?.isGpsDenied && (
             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse flex items-center gap-1">
               <Radio className="w-3 h-3" />
-              GPS-DENIED (UWB-CRL ACTIVE)
+              GPS-DENIED
             </span>
           )}
           {Object.values(byzantineState?.byzantineAgents || {}).some(
@@ -774,24 +1175,87 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
           ) && (
             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-1">
               <ShieldAlert className="w-3 h-3" />
-              BYZANTINE EJECTION ACTIVE
+              BYZANTINE EJECTED
             </span>
           )}
         </div>
       </div>
 
-      {/* Canvas */}
+      {/* Interactive Canvas */}
       <canvas
         ref={canvasRef}
         width={960}
         height={560}
-        onClick={handleCanvasClick}
-        className="w-full h-auto cursor-crosshair block"
+        onMouseDown={handlePointerDown}
+        onMouseMove={handlePointerMove}
+        onMouseUp={handlePointerUp}
+        onMouseLeave={handlePointerCancel}
+        onTouchStart={handlePointerDown}
+        onTouchMove={handlePointerMove}
+        onTouchEnd={handlePointerUp}
+        onTouchCancel={handlePointerCancel}
+        className="w-full h-auto cursor-crosshair block touch-none"
       />
+
+      {/* Operator Override Floating Banner / Toast */}
+      {toastMessage && (
+        <div className="absolute top-14 left-1/2 -translate-x-1/2 z-20 pointer-events-none animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="px-4 py-2 rounded-xl bg-slate-900/95 border border-amber-500/50 text-amber-300 text-xs font-mono font-bold shadow-2xl flex items-center gap-2 backdrop-blur-md">
+            <Zap className="w-4 h-4 text-amber-400 animate-bounce" />
+            <span>{toastMessage}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Selected Task Operator Override Control Bar */}
+      {selectedTaskId && (() => {
+        const selTask = tasks.find((t) => t.id === selectedTaskId);
+        if (!selTask) return null;
+        const isOverridden = !!selTask.isOperatorOverride;
+
+        return (
+          <div className="absolute bottom-11 left-3 right-3 z-10 flex items-center justify-between px-3.5 py-2 rounded-xl bg-slate-900/90 backdrop-blur-md border border-slate-700/80 text-xs font-mono">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-bold text-white">TASK {selTask.id} [{selTask.type}]</span>
+              <span className="text-slate-400">•</span>
+              <span className={selTask.status === 'COMPLETED' ? 'text-emerald-400' : 'text-sky-300'}>
+                STATUS: {selTask.status}
+              </span>
+              <span className="text-slate-400">•</span>
+              <span className="text-slate-300">
+                ASSIGNED: {selTask.assignedAgentId ? (agentCallsignMap[selTask.assignedAgentId]?.split(' ')[0] || selTask.assignedAgentId) : 'UNASSIGNED'}
+              </span>
+              {isOverridden && (
+                <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-bold">
+                  ⚡ OPERATOR OVERRIDE (AUCTION BYPASSED)
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {isOverridden && onClearTaskOverride && (
+                <button
+                  onClick={() => {
+                    onClearTaskOverride(selTask.id);
+                    showToast(`🔄 OPERATOR OVERRIDE RELEASED: Task ${selTask.id} returned to CBBA auction consensus`);
+                  }}
+                  className="px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Unlock className="w-3.5 h-3.5" />
+                  Release to CBBA
+                </button>
+              )}
+              <span className="text-[10px] text-slate-400 hidden sm:inline">
+                💡 Drag this task directly onto any drone to force re-route
+              </span>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Bottom Legend */}
       <div className="absolute bottom-2 left-3 right-3 flex items-center justify-between text-[10px] text-slate-400 pointer-events-none font-mono">
-        <div className="flex items-center gap-3 bg-slate-900/80 px-2 py-1 rounded backdrop-blur border border-slate-800">
+        <div className="flex items-center gap-3 bg-slate-900/80 px-2 py-1 rounded backdrop-blur border border-slate-800 flex-wrap">
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-sky-400" /> Air (Fixed/Quad)
           </span>
@@ -807,14 +1271,15 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-rose-500" /> OPFOR Hostile
           </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-purple-500" /> Jammer
+          <span className="flex items-center gap-1 text-amber-300">
+            <Zap className="w-2.5 h-2.5 text-amber-400" /> Drag Task → Drone to Re-route
           </span>
         </div>
-        <span className="bg-slate-900/80 px-2 py-1 rounded backdrop-blur border border-slate-800">
+        <span className="bg-slate-900/80 px-2 py-1 rounded backdrop-blur border border-slate-800 hidden md:inline">
           Coordinate Projection: MCAS Miramar Tactical Grid (32.8812°N, 117.2345°W)
         </span>
       </div>
     </div>
   );
 };
+

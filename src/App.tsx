@@ -119,6 +119,9 @@ export default function App() {
     removeThreat,
     toggleThreat,
     addCustomTask,
+    manualRerouteTask,
+    manualMoveTask,
+    clearTaskOverride,
     setActiveSandboxTool,
   } = useSwarmSimulation();
 
@@ -364,6 +367,9 @@ export default function App() {
                     setSelectedTaskId(taskId);
                     if (taskId) generateExplainData(taskId);
                   }}
+                  onManualReroute={manualRerouteTask}
+                  onManualMoveTask={manualMoveTask}
+                  onClearTaskOverride={clearTaskOverride}
                   onCanvasClickWithTool={(pos, tool) => {
                     if (tool === 'ADD_SAM') {
                       injectSAM(pos[0], pos[1]);

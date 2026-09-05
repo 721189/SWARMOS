@@ -522,6 +522,20 @@ Domain Coordination Summary:
     for (const task of updatedTasks) {
       if (task.status === 'COMPLETED') continue;
 
+      // Operator Override Lock: Bypass CBBA auction for manually routed tasks
+      if (task.isOperatorOverride && task.assignedAgentId) {
+        const assignedAgent = updatedAgents.find((a) => a.id === task.assignedAgentId);
+        if (assignedAgent && assignedAgent.health.propulsion > 0.1) {
+          if (!assignedAgent.bundle.includes(task.id)) {
+            assignedAgent.bundle.unshift(task.id);
+            assignedAgent.path.unshift(task.id);
+          }
+          assignedAgent.winningBids[task.id] = 999999;
+          assignedAgent.winningAgents[task.id] = assignedAgent.id;
+          continue; // Successfully locked to operator-assigned agent
+        }
+      }
+
       let highestBid = -1;
       let winningAgent: AgentEntity | null = null;
 
@@ -1241,7 +1255,9 @@ Autonomous Re-planning Decision:
 
     const winner = task.assignedAgentId;
     const winnerAgent = agents.find((a) => a.id === winner);
-    const explanation = winner
+    const explanation = task.isOperatorOverride && winner
+      ? `⚡ [MANUAL OPERATOR OVERRIDE] Task ${task.id} (${task.type}) was manually re-routed to ${winnerAgent?.callsign || winner} via operator drag-and-drop intervention, forcefully locking assignment and bypassing autonomous CBBA auction consensus.`
+      : winner
       ? `Task ${task.id} (${task.type}) was awarded to ${winnerAgent?.callsign || winner} because it satisfies payload requirements (${task.requiredPayload || 'GENERIC'}) and offered the highest marginal utility score of ${
           biddingMatrix.find((b) => b.agentId === winner)?.marginalBid || 0
         } pts.`
@@ -1545,6 +1561,135 @@ ${tasks.map((t) => {
     }, 100);
   }, [tasks.length, triggerAuction, addLog]);
 
+  // --- Operator Intervention: Manual Re-routing & Task Drag-and-Drop ---
+  const manualRerouteTask = useCallback((taskId: string, targetAgentId: string) => {
+    const targetCallsign = agentCallsignMap[targetAgentId] || targetAgentId;
+
+    setTasks((prevTasks) => {
+      const taskIndex = prevTasks.findIndex((t) => t.id === taskId);
+      if (taskIndex === -1) return prevTasks;
+      const targetTask = prevTasks[taskIndex];
+
+      const updatedTasks = prevTasks.map((t) => {
+        if (t.id === taskId) {
+          return {
+            ...t,
+            assignedAgentId: targetAgentId,
+            status: t.status === 'COMPLETED' ? 'COMPLETED' : 'ASSIGNED',
+            isOperatorOverride: true,
+            manualOverrideTimestamp: Date.now(),
+          } as TaskEntity;
+        }
+        return t;
+      });
+
+      setAgents((prevAgents) => {
+        return prevAgents.map((agent) => {
+          // If another agent had this task, remove it
+          if (agent.id !== targetAgentId) {
+            const hasTask = agent.bundle.includes(taskId) || agent.path.includes(taskId);
+            if (hasTask) {
+              const newBundle = agent.bundle.filter((id) => id !== taskId);
+              const newPath = agent.path.filter((id) => id !== taskId);
+              const newWinningBids = { ...agent.winningBids };
+              delete newWinningBids[taskId];
+              const newWinningAgents = { ...agent.winningAgents };
+              delete newWinningAgents[taskId];
+
+              let newCurrentTaskId = agent.currentTaskId;
+              let newTargetPos = agent.targetPosition;
+              let newStatus = agent.status;
+
+              if (agent.currentTaskId === taskId) {
+                newCurrentTaskId = newPath.length > 0 ? newPath[0] : null;
+                const nextTask = updatedTasks.find((t) => t.id === newCurrentTaskId);
+                newTargetPos = nextTask ? nextTask.position : null;
+                newStatus = newCurrentTaskId ? 'TRAVERSING' : 'IDLE';
+              }
+
+              return {
+                ...agent,
+                bundle: newBundle,
+                path: newPath,
+                winningBids: newWinningBids,
+                winningAgents: newWinningAgents,
+                currentTaskId: newCurrentTaskId,
+                targetPosition: newTargetPos,
+                status: newStatus,
+              };
+            }
+            return agent;
+          }
+
+          // Target agent gets immediate high-priority override dispatch
+          const newBundle = [taskId, ...agent.bundle.filter((id) => id !== taskId)];
+          const newPath = [taskId, ...agent.path.filter((id) => id !== taskId)];
+          const newWinningBids = { ...agent.winningBids, [taskId]: 999999 };
+          const newWinningAgents = { ...agent.winningAgents, [taskId]: targetAgentId };
+
+          return {
+            ...agent,
+            bundle: newBundle,
+            path: newPath,
+            winningBids: newWinningBids,
+            winningAgents: newWinningAgents,
+            currentTaskId: taskId,
+            targetPosition: targetTask.position,
+            status: 'TRAVERSING',
+            isManualOverride: true,
+          };
+        });
+      });
+
+      addLog(`⚡ [OPERATOR OVERRIDE] Manual re-route: Task ${taskId} (${targetTask.type}) forcefully assigned to ${targetCallsign.split(' ')[0]} (CBBA auction bypassed).`);
+      return updatedTasks;
+    });
+  }, [addLog]);
+
+  const manualMoveTask = useCallback((taskId: string, newPos: [number, number]) => {
+    const roundedPos: [number, number] = [Math.round(newPos[0]), Math.round(newPos[1])];
+    setTasks((prevTasks) => {
+      const task = prevTasks.find((t) => t.id === taskId);
+      if (!task) return prevTasks;
+
+      if (task.assignedAgentId) {
+        setAgents((prevAgents) => {
+          return prevAgents.map((agent) => {
+            if (agent.id === task.assignedAgentId && agent.currentTaskId === taskId) {
+              return {
+                ...agent,
+                targetPosition: roundedPos,
+              };
+            }
+            return agent;
+          });
+        });
+      }
+
+      addLog(`📍 [TACTICAL RETARGET] Task ${taskId} repositioned to [${roundedPos[0]}, ${roundedPos[1]}].`);
+      return prevTasks.map((t) => (t.id === taskId ? { ...t, position: roundedPos } : t));
+    });
+  }, [addLog]);
+
+  const clearTaskOverride = useCallback((taskId: string) => {
+    setTasks((prevTasks) => {
+      const updated = prevTasks.map((t) => {
+        if (t.id === taskId) {
+          return {
+            ...t,
+            isOperatorOverride: false,
+          };
+        }
+        return t;
+      });
+      addLog(`🔄 [OPERATOR RELEASE] Task ${taskId} returned to autonomous CBBA consensus.`);
+      setTimeout(() => {
+        triggerAuction();
+      }, 50);
+      return updated;
+    });
+  }, [triggerAuction, addLog]);
+
   return {
     agents: activeScrubbedSnapshot ? activeScrubbedSnapshot.agents : agents,
     tasks: activeScrubbedSnapshot ? activeScrubbedSnapshot.tasks : tasks,
@@ -1606,6 +1751,9 @@ ${tasks.map((t) => {
     removeThreat,
     toggleThreat,
     addCustomTask,
+    manualRerouteTask,
+    manualMoveTask,
+    clearTaskOverride,
     setActiveSandboxTool,
     scrubToSnapshot: setActiveScrubbedSnapshot,
   };

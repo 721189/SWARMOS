@@ -26,6 +26,8 @@ export interface TaskEntity {
   prerequisites?: string[]; // Task IDs that must be completed before execution
   requiredPayload?: PayloadCapability;
   requiredDomain?: AgentDomain;
+  isOperatorOverride?: boolean; // Manual operator re-routing lock (bypasses CBBA auction)
+  manualOverrideTimestamp?: number;
 }
 
 export interface MavlinkPacket {
@@ -90,6 +92,7 @@ export interface AgentEntity {
   breadcrumbs: [number, number][];
   messagesSent: number;
   distanceTraveled: number;
+  isManualOverride?: boolean;
   // Kinematics & Dubins modeling
   turnRadiusM?: number;
   bankAngleDeg?: number;
