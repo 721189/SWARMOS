@@ -166,7 +166,7 @@ export interface ByzantineState {
     status: 'TRUSTED' | 'SUSPECT' | 'QUARANTINED' | 'EJECTED';
     violations: string[];
   }>;
-  bftThresholdPct: number; // 67% (2f+1 quorum)
+  anomalyThresholdPct: number; // 67% (2f+1 quorum)
   blockedPoisonBids: number;
   spoofedVectorsMitigated: number;
 }
@@ -197,7 +197,7 @@ export interface TakServerStatus {
   lastHeartbeat: string;
 }
 
-// --- Tactical SDR MANET & Zero-Trust Cryptography ---
+// --- Tactical SDR MANET & anomaly-aware Cryptography ---
 export interface SdrMeshState {
   radioModel: 'SILVUS_STREAMCASTER_4400' | 'TRELLISWARE_TW950' | 'PERSISTENT_MPU5';
   frequencyMhz: number;

@@ -1,5 +1,5 @@
 """
-SWARMOS Byzantine Fault-Tolerant Consensus Protocol (BFT-CBBA)
+SWARMOS Byzantine-aware anomaly filtering Protocol (CBBA with Anomaly Filtering)
 Defends against Sybil bid-poisoning and kinematic GPS/telemetry spoofing attacks.
 Incorporates UWB Cooperative Relative Localization (CRL) distance matrices.
 """
@@ -91,7 +91,7 @@ class ByzantineAnomalyFilter:
 
         if new_trust <= 35.0:
             self.agent_statuses[agent_id] = BftAgentStatus.QUARANTINED
-            print(f"[BFT-CONSENSUS] ⚠ AGENT {agent_id} QUARANTINED! Trust={new_trust}%. Reason: {reason}")
+            print(f"[Anomaly Filter-CONSENSUS] ⚠ AGENT {agent_id} QUARANTINED! Trust={new_trust}%. Reason: {reason}")
         elif new_trust <= 65.0:
             self.agent_statuses[agent_id] = BftAgentStatus.SUSPECT
 
@@ -99,4 +99,4 @@ class ByzantineAnomalyFilter:
         """Scrub cryptographic certificates and restore agent to fleet."""
         self.trust_scores[agent_id] = 100.0
         self.agent_statuses[agent_id] = BftAgentStatus.TRUSTED
-        print(f"[BFT-CONSENSUS] ✓ Agent {agent_id} remediated and restored to consensus pool.")
+        print(f"[Anomaly Filter-CONSENSUS] ✓ Agent {agent_id} remediated and restored to consensus pool.")

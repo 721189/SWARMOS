@@ -1,5 +1,5 @@
 import unittest
-from swarm_engine.bft_cbba import ByzantineAnomalyFilter, BftAgentStatus
+from swarm_engine.anomaly_cbba import ByzantineAnomalyFilter, BftAgentStatus
 from swarm_engine.cbba import CBBAEngine
 from swarm_engine.agents import Agent
 from swarm_engine.tasks import Task, TaskType

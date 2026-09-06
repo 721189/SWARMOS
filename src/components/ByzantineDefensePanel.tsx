@@ -43,7 +43,7 @@ export const ByzantineDefensePanel: React.FC<ByzantineDefensePanelProps> = ({
     (info: { status: string }) => info.status === 'QUARANTINED' || info.status === 'EJECTED'
   ).length;
   const honestQuorumPct = ((totalDrones - compromisedDrones) / totalDrones) * 100;
-  const isQuorumHealthy = honestQuorumPct >= byzantineState.bftThresholdPct;
+  const isQuorumHealthy = honestQuorumPct >= byzantineState.anomalyThresholdPct;
 
   return (
     <div className="space-y-6">
@@ -103,12 +103,12 @@ export const ByzantineDefensePanel: React.FC<ByzantineDefensePanelProps> = ({
         {/* Byzantine Anomaly Filter */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
           <div>
-            <div className="text-xs font-mono text-slate-400 uppercase tracking-wider">BFT Quorum Health</div>
+            <div className="text-xs font-mono text-slate-400 uppercase tracking-wider">Anomaly Filter Health</div>
             <div className={`text-lg font-bold font-mono mt-1 ${isQuorumHealthy ? 'text-emerald-400' : 'text-red-400'}`}>
               {honestQuorumPct.toFixed(1)}% Honest
             </div>
             <div className="text-[11px] font-mono text-slate-500 mt-0.5">
-              Threshold: &gt; {byzantineState.bftThresholdPct.toFixed(1)}% (2f+1)
+              Threshold: &gt; {byzantineState.anomalyThresholdPct.toFixed(1)}% (2f+1)
             </div>
           </div>
           <ShieldCheck className="w-8 h-8 text-indigo-500/30" />
@@ -348,7 +348,7 @@ export const ByzantineDefensePanel: React.FC<ByzantineDefensePanelProps> = ({
           {/* Bottom Security Info */}
           <div className="mt-4 pt-3 border-t border-slate-800 text-[11px] font-mono text-slate-400 flex items-center justify-between">
             <span>Byzantine Mode: Real-time Auction Validator Active</span>
-            <span className="text-indigo-400">Zero-Trust Ephemeral Mesh</span>
+            <span className="text-indigo-400">anomaly-aware Ephemeral Mesh</span>
           </div>
         </div>
       </div>

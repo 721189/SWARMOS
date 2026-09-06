@@ -10,7 +10,7 @@ export const SCAFFOLD_FILES: ScaffoldFile[] = [
 > **Vibe-Coded Autonomous Swarm Intelligence**: Dynamic Consensus-Based Bundle Algorithm (CBBA), NVIDIA Nemotron Natural Language Mission Ingestion, Real-Time Failure Resilience, and Nebius Cloud Compute Matrix.
 
 ## Overview
-SWARMOS is a production-grade, distributed multi-agent swarm coordination platform engineered for GPS-degraded, communication-constrained, and contested environments.
+SWARMOS is a reproducible, distributed multi-agent swarm coordination platform engineered for GPS-degraded, communication-constrained, and contested environments.
 
 ### Quickstart
 \`\`\`bash
@@ -671,7 +671,7 @@ set -e
 echo "=== SWARMOS Turnkey GitHub Pusher ==="
 git init
 git add .
-git commit -m "feat(swarm): release production-grade SWARMOS autonomous CBBA coordination platform"
+git commit -m "feat(swarm): release reproducible SWARMOS autonomous CBBA coordination platform"
 git branch -M main
 
 echo "Enter your GitHub repository HTTPS URL (e.g. https://github.com/USERNAME/swarmos.git):"

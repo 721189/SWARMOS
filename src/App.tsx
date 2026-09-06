@@ -164,7 +164,7 @@ export default function App() {
                 )}
               </div>
               <p className="text-[11px] text-slate-400 hidden sm:block">
-                Strategic-Grade Autonomous Swarm OS • MUM-T Multi-Domain Fleet &amp; Zero-Trust SDR MANET
+                Strategic-Grade Autonomous Swarm OS • MUM-T Multi-Domain Fleet &amp; anomaly-aware SDR MANET
               </p>
             </div>
           </div>
@@ -246,7 +246,7 @@ export default function App() {
               }`}
             >
               <Lock className="w-3.5 h-3.5 text-purple-400" />
-              <span>Zero-Trust SDR &amp; SLM</span>
+              <span>anomaly-aware SDR &amp; SLM</span>
             </button>
 
             <button
@@ -272,7 +272,7 @@ export default function App() {
               }`}
             >
               <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
-              <span>BFT Defense</span>
+              <span>Anomaly Defense</span>
             </button>
 
             <button
@@ -527,7 +527,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Tab 3: Edge-Native Zero-Trust SDR & Jetson Orin SLM */}
+        {/* Tab 3: Edge-Native anomaly-aware SDR & Jetson Orin SLM */}
         {activeTab === 'sdrmesh' && (
           <div className="animate-in fade-in duration-150">
             <SdrMeshPanel
@@ -553,7 +553,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Tab 5: GPS-Denied & Byzantine BFT Defense */}
+        {/* Tab 5: GPS-Denied & Byzantine Anomaly Defense */}
         {activeTab === 'byzantine' && (
           <div className="animate-in fade-in duration-150">
             <ByzantineDefensePanel
@@ -674,7 +674,7 @@ export default function App() {
           <div className="flex items-center gap-4 text-slate-400">
             <span>MUM-T Air+Ground+Surface</span>
             <span>•</span>
-            <span>Zero-Trust SDR MANET</span>
+            <span>anomaly-aware SDR MANET</span>
             <span>•</span>
             <span>Jetson Orin Native TensorRT-LLM</span>
             <span>•</span>

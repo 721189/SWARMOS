@@ -2,7 +2,7 @@
 
 ## Core Engine (`swarm_engine/`)
 - `cbba.py`: Implements the Consensus-Based Bundle Algorithm (Choi 2009) with Phase 1 (Bundle Construction) and Phase 2 (Conflict Resolution).
-- `bft_cbba.py`: Byzantine Anomaly Filter. Isolates malicious or failing nodes injecting poisoned bids.
+- `anomaly_cbba.py`: Byzantine Anomaly Filter. Isolates malicious or failing nodes injecting poisoned bids.
 - `environment.py`: Simulated RF mesh network, physical world state.
 - `failures.py`: Injects deterministic failures (motor, jammer).
 

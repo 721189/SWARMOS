@@ -140,7 +140,7 @@ export const BenchmarkSuite: React.FC = () => {
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-0.5">
-                Head-to-head empirical validation across 5 distinct coordination paradigms under physical RF packet loss, jamming, and kinetic node loss.
+                Head-to-head empirical validation across 5 distinct coordination paradigms under stochastic communication packet loss, jamming, and kinetic node loss.
               </p>
             </div>
           </div>

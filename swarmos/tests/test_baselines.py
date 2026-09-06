@@ -77,7 +77,7 @@ class TestBaselines(unittest.TestCase):
                 claimed_tasks.add(tid)
 
     def test_swarmos_stack_integration(self):
-        """SWARMOS completes with valid safety checks, BFT validator, and packet tracking."""
+        """SWARMOS completes with valid safety checks, Anomaly Filter validator, and packet tracking."""
         result = run_single_baseline_trial(
             fleet_size=6,
             task_count=10,

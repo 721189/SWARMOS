@@ -16,7 +16,7 @@ from typing import Dict, List, Tuple, Optional, Any, Set
 from enum import Enum
 from .agents import Agent, AgentStatus
 from .tasks import Task, TaskStatus
-from .bft_cbba import ByzantineAnomalyFilter, BftAgentStatus
+from .anomaly_cbba import ByzantineAnomalyFilter, BftAgentStatus
 
 
 class AuctionTermination(Enum):

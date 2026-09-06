@@ -28,13 +28,13 @@ const FIGURE_ASSETS: FigureAsset[] = [
   {
     id: 'fig2',
     figureNum: 'Figure 2',
-    filenameJpg: 'fig2_bft_cbba_flowchart.jpg',
-    filenamePng: 'fig2_bft_cbba_flowchart.png',
-    title: 'Dual-Phase BFT-CBBA Algorithmic Consensus Flowchart',
+    filenameJpg: 'fig2_anomaly_cbba_flowchart.jpg',
+    filenamePng: 'fig2_anomaly_cbba_flowchart.png',
+    title: 'Dual-Phase CBBA with Anomaly Filtering Algorithmic Consensus Flowchart',
     description: 'Phase 1 bundle construction with path-loss discounting, Phase 2 quorum verification, Choi 2009 conflict table, and operator preemption.',
-    urlJpg: '/figures/fig2_bft_cbba_flowchart.jpg',
-    urlPng: '/figures/fig2_bft_cbba_flowchart.png',
-    repoPath: 'public/figures/fig2_bft_cbba_flowchart.png',
+    urlJpg: '/figures/fig2_anomaly_cbba_flowchart.jpg',
+    urlPng: '/figures/fig2_anomaly_cbba_flowchart.png',
+    repoPath: 'public/figures/fig2_anomaly_cbba_flowchart.png',
   },
   {
     id: 'fig3',
@@ -55,7 +55,7 @@ export const TechnicalReportViewer: React.FC = () => {
   const [activeModalImage, setActiveModalImage] = useState<FigureAsset | null>(null);
 
   const handleCopyLatex = () => {
-    fetch('/docs/preprint_ieee_bft_cbba.tex')
+    fetch('/docs/preprint_ieee_anomaly_cbba.tex')
       .then((res) => {
         if (!res.ok) throw new Error('Network error');
         return res.text();
@@ -68,7 +68,7 @@ export const TechnicalReportViewer: React.FC = () => {
       .catch(() => {
         const fallbackText = `% IEEE T-RO / RA-L 6-Page Preprint: Byzantine-Tolerant CBBA for MUM-T
 \\documentclass[journal,10pt,twocolumn]{IEEEtran}
-% Full file located at /docs/preprint_ieee_bft_cbba.tex`;
+% Full file located at /docs/preprint_ieee_anomaly_cbba.tex`;
         navigator.clipboard.writeText(fallbackText);
         setCopied(true);
         setTimeout(() => setCopied(false), 2500);
@@ -77,8 +77,8 @@ export const TechnicalReportViewer: React.FC = () => {
 
   const handleDownloadLatex = () => {
     const element = document.createElement('a');
-    element.setAttribute('href', '/docs/preprint_ieee_bft_cbba.tex');
-    element.setAttribute('download', 'preprint_ieee_bft_cbba.tex');
+    element.setAttribute('href', '/docs/preprint_ieee_anomaly_cbba.tex');
+    element.setAttribute('download', 'preprint_ieee_anomaly_cbba.tex');
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
@@ -178,8 +178,8 @@ export const TechnicalReportViewer: React.FC = () => {
           {/* Action Buttons */}
           <div className="flex flex-wrap items-center gap-2">
             <a
-              href="/docs/bft_cbba_overleaf_bundle.zip"
-              download="bft_cbba_overleaf_bundle.zip"
+              href="/docs/anomaly_cbba_overleaf_bundle.zip"
+              download="anomaly_cbba_overleaf_bundle.zip"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-500 hover:bg-indigo-400 text-white text-xs font-bold transition-all shadow-md"
               title="Download full Overleaf zip with LaTeX source and all 3 figures"
             >
@@ -221,7 +221,7 @@ export const TechnicalReportViewer: React.FC = () => {
             <span>Author: <strong className="text-slate-200">Shivam Singh, and Collaborators</strong></span>
             <span>Target: <strong className="text-emerald-400">IEEE Transactions on Robotics (T-RO) / RA-L</strong></span>
             <span>Length: <strong className="text-sky-400">6 Full Pages (IEEEtran)</strong></span>
-            <span>LaTeX Source: <strong className="text-amber-400">/docs/preprint_ieee_bft_cbba.tex</strong></span>
+            <span>LaTeX Source: <strong className="text-amber-400">/docs/preprint_ieee_anomaly_cbba.tex</strong></span>
           </div>
         </div>
       </div>
@@ -244,8 +244,8 @@ export const TechnicalReportViewer: React.FC = () => {
           </div>
 
           <a
-            href="/docs/bft_cbba_overleaf_bundle.zip"
-            download="bft_cbba_overleaf_bundle.zip"
+            href="/docs/anomaly_cbba_overleaf_bundle.zip"
+            download="anomaly_cbba_overleaf_bundle.zip"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-all shadow-sm"
           >
             <FolderArchive className="w-3.5 h-3.5" />
@@ -333,7 +333,7 @@ export const TechnicalReportViewer: React.FC = () => {
           <div className="text-slate-400 text-[11px] space-y-1 pl-5">
             <div>&bull; Web Root: <code className="text-sky-300">public/figures/</code> (e.g. <code className="text-slate-200">public/figures/fig1_tactical_architecture.jpg</code>)</div>
             <div>&bull; LaTeX Directory: <code className="text-sky-300">docs/figures/</code> (mirrored for local LaTeX builds)</div>
-            <div>&bull; In Overleaf: Upload all 3 <code className="text-amber-300">.jpg</code> files directly alongside <code className="text-amber-300">preprint_ieee_bft_cbba.tex</code> (or use the one-click ZIP).</div>
+            <div>&bull; In Overleaf: Upload all 3 <code className="text-amber-300">.jpg</code> files directly alongside <code className="text-amber-300">preprint_ieee_anomaly_cbba.tex</code> (or use the one-click ZIP).</div>
           </div>
         </div>
       </div>
@@ -341,7 +341,7 @@ export const TechnicalReportViewer: React.FC = () => {
       {viewMode === 'latex' ? (
         <div className="p-6 rounded-xl bg-slate-950 border border-slate-800 space-y-3 font-mono text-xs text-slate-300 shadow-2xl">
           <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-            <span className="text-sky-400 font-bold">/docs/preprint_ieee_bft_cbba.tex</span>
+            <span className="text-sky-400 font-bold">/docs/preprint_ieee_anomaly_cbba.tex</span>
             <span className="text-slate-500 text-[11px]">Ready for Overleaf compilation (pdflatex / xelatex)</span>
           </div>
           <pre className="overflow-x-auto whitespace-pre p-4 bg-slate-900 rounded-lg text-slate-200 text-[11px] leading-relaxed max-h-[750px]">
@@ -377,10 +377,10 @@ export const TechnicalReportViewer: React.FC = () => {
 \\maketitle
 
 \\begin{abstract}
-Manned-Unmanned Teaming (MUM-T) fleets operating across heterogeneous domains (air, ground, surface) require rapid, decentralized task allocation without relying on vulnerable centralized command-and-control (C2) servers. While the Consensus-Based Bundle Algorithm (CBBA) provides guaranteed polynomial-time convergence for cooperative agents, its standard formulation catastrophically degrades under adversarial conditions---specifically RF jamming, communication packet loss, GPS-denied environments, and Byzantine node compromise (such as bid spoofing, Sybil inflation, and state corruption). In this paper, we propose \\textbf{BFT-CBBA}, a robust, Byzantine-tolerant extension to CBBA engineered for contested, heterogeneous multi-domain swarms...
+Manned-Unmanned Teaming (MUM-T) fleets operating across heterogeneous domains (air, ground, surface) require rapid, decentralized task allocation without relying on vulnerable centralized command-and-control (C2) servers. While the Consensus-Based Bundle Algorithm (CBBA) provides guaranteed polynomial-time convergence for cooperative agents, its standard formulation catastrophically degrades under adversarial conditions---specifically RF jamming, communication packet loss, GPS-denied environments, and Byzantine node compromise (such as bid spoofing, Sybil inflation, and state corruption). In this paper, we propose \\textbf{CBBA with Anomaly Filtering}, a robust, Byzantine-tolerant extension to CBBA engineered for contested, heterogeneous multi-domain swarms...
 \\end{abstract}
 
-% ... Full text with all sections, figures, proofs, tables, and 25 references is saved in /docs/preprint_ieee_bft_cbba.tex`}
+% ... Full text with all sections, figures, proofs, tables, and 25 references is saved in /docs/preprint_ieee_anomaly_cbba.tex`}
           </pre>
         </div>
       ) : (
@@ -396,7 +396,7 @@ Manned-Unmanned Teaming (MUM-T) fleets operating across heterogeneous domains (a
               </h2>
             </div>
             <p className="text-xs text-slate-300 leading-relaxed">
-              Manned-Unmanned Teaming (MUM-T) fleets operating across heterogeneous domains (air, ground, surface) require rapid, decentralized task allocation without relying on vulnerable centralized command-and-control (C2) servers. While the Consensus-Based Bundle Algorithm (CBBA) provides guaranteed polynomial-time convergence for cooperative agents, its standard formulation catastrophically degrades under adversarial conditions---specifically RF jamming, communication packet loss, GPS-denied environments, and Byzantine node compromise (such as bid spoofing, Sybil inflation, and state corruption). In this paper, we propose <strong>BFT-CBBA</strong>, a robust, Byzantine-tolerant extension to CBBA engineered for contested, heterogeneous multi-domain swarms. We introduce: (1) an asymmetric cryptographic session-epoch and quorum-filtered conflict resolution matrix that detects, bounds, and isolates adversarial bid injection; (2) a dynamic RF channel-aware propagation penalty incorporating log-distance path loss, thermal noise, and 3D knife-edge terrain diffraction; and (3) an operator preemption protocol that enables deterministic, real-time manual drag-and-drop task re-routing while strictly preserving consensus invariants and monotonic bundle convergence. Across 5,000 Monte Carlo configurations and simulated electronic warfare injection, BFT-CBBA maintains &gt;94.2% task completion under 30% Byzantine node corruption and severe RF jamming, reducing convergence latency by 78.1% compared to state-of-the-art robust decentralized auction heuristics.
+              Manned-Unmanned Teaming (MUM-T) fleets operating across heterogeneous domains (air, ground, surface) require rapid, decentralized task allocation without relying on vulnerable centralized command-and-control (C2) servers. While the Consensus-Based Bundle Algorithm (CBBA) provides guaranteed polynomial-time convergence for cooperative agents, its standard formulation catastrophically degrades under adversarial conditions---specifically RF jamming, communication packet loss, GPS-denied environments, and Byzantine node compromise (such as bid spoofing, Sybil inflation, and state corruption). In this paper, we propose <strong>CBBA with Anomaly Filtering</strong>, a robust, Byzantine-tolerant extension to CBBA engineered for contested, heterogeneous multi-domain swarms. We introduce: (1) an asymmetric cryptographic session-epoch and quorum-filtered conflict resolution matrix that detects, bounds, and isolates adversarial bid injection; (2) a dynamic RF channel-aware propagation penalty incorporating log-distance path loss, thermal noise, and 3D knife-edge terrain diffraction; and (3) an operator preemption protocol that enables deterministic, real-time manual drag-and-drop task re-routing while strictly preserving consensus invariants and monotonic bundle convergence. Across 5,000 Monte Carlo configurations and simulated electronic warfare injection, CBBA with Anomaly Filtering maintains &gt;94.2% task completion under 30% Byzantine node corruption and severe RF jamming, reducing convergence latency by 78.1% compared to state-of-the-art robust decentralized auction heuristics.
             </p>
           </section>
 
@@ -423,7 +423,7 @@ Manned-Unmanned Teaming (MUM-T) fleets operating across heterogeneous domains (a
                 />
               </div>
               <div className="text-xs font-mono text-slate-400 leading-normal">
-                <strong className="text-sky-300">Figure 1.</strong> Heterogeneous Manned-Unmanned Teaming (MUM-T) operational theater. Fixed-wing reconnaissance UAVs, search-and-rescue quadcopters, an unmanned ground vehicle (UGV) mobile charging station, and an unmanned surface vessel (USV) coordinate over a zero-trust SDR MANET amidst directional EW jamming and terrain-induced line-of-sight occlusion.
+                <strong className="text-sky-300">Figure 1.</strong> Heterogeneous Manned-Unmanned Teaming (MUM-T) operational theater. Fixed-wing reconnaissance UAVs, search-and-rescue quadcopters, an unmanned ground vehicle (UGV) mobile charging station, and an unmanned surface vessel (USV) coordinate over a anomaly-aware SDR MANET amidst directional EW jamming and terrain-induced line-of-sight occlusion.
               </div>
             </div>
 
@@ -442,14 +442,14 @@ Manned-Unmanned Teaming (MUM-T) fleets operating across heterogeneous domains (a
             <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
               <span className="text-xs font-mono font-bold text-emerald-400">02</span>
               <h2 className="text-lg font-bold text-white tracking-tight">
-                Related Work in Decentralized Robotics &amp; BFT
+                Related Work in Decentralized Robotics &amp; Anomaly Filter
               </h2>
             </div>
             <p className="text-sm text-slate-300">
               Decentralized multi-robot task allocation (MRTA) has developed from greedy single-task auctions [Gerkey &amp; Matarić, 2004] to bundle auctions [Choi et al., 2009]. Asynchronous extensions [Johnson et al., 2017] and dynamic time-window models (CBBA-TW) [Ponda et al., 2010] addressed communication latency and mission deadlines, but both inherently assume cooperative node behavior.
             </p>
             <p className="text-sm text-slate-300">
-              Byzantine Fault Tolerance (BFT) was established by Lamport et al. [1982] and formalized for asynchronous networks via PBFT [Castro &amp; Liskov, 1999]. In robotic swarms, recent investigations by Gielis et al. [2022] and Buckman et al. [2020] demonstrated that unauthenticated auction protocols diverge under adversarial injection. Our work bridges this theoretical divide by uniting kinematic link-budget physics with BFT quorum bounds.
+              Byzantine-aware anomaly filtering (Anomaly Filter) was established by Lamport et al. [1982] and formalized for asynchronous networks via PAnomaly Filter [Castro &amp; Liskov, 1999]. In robotic swarms, recent investigations by Gielis et al. [2022] and Buckman et al. [2020] demonstrated that unauthenticated auction protocols diverge under adversarial injection. Our work bridges this theoretical divide by uniting kinematic link-budget physics with Anomaly Filter quorum bounds.
             </p>
           </section>
 
@@ -502,12 +502,12 @@ Manned-Unmanned Teaming (MUM-T) fleets operating across heterogeneous domains (a
             </div>
           </section>
 
-          {/* Section 4: BFT-CBBA Protocol */}
+          {/* Section 4: CBBA with Anomaly Filtering Protocol */}
           <section className="space-y-4">
             <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
               <span className="text-xs font-mono font-bold text-emerald-400">04</span>
               <h2 className="text-lg font-bold text-white tracking-tight">
-                The BFT-CBBA Protocol &amp; Extended Consensus Matrix
+                The CBBA with Anomaly Filtering Protocol &amp; Extended Consensus Matrix
               </h2>
             </div>
 
@@ -515,21 +515,21 @@ Manned-Unmanned Teaming (MUM-T) fleets operating across heterogeneous domains (a
             <div className="my-6 p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
               <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
                 <img
-                  src="/figures/fig2_bft_cbba_flowchart.jpg"
-                  alt="Figure 2: Algorithmic Flowchart of Dual-Phase BFT-CBBA"
+                  src="/figures/fig2_anomaly_cbba_flowchart.jpg"
+                  alt="Figure 2: Algorithmic Flowchart of Dual-Phase CBBA with Anomaly Filtering"
                   className="w-full h-auto object-cover max-h-[380px]"
                   referrerPolicy="no-referrer"
                 />
               </div>
               <div className="text-xs font-mono text-slate-400 leading-normal">
-                <strong className="text-sky-300">Figure 2.</strong> Algorithmic flowchart of the BFT-CBBA protocol. Phase 1 constructs bundles with kinematic and RF path loss degradation discounting; Phase 2 executes quorum validation, cryptographic epoch checks, Choi 2009 conflict table rules, and operator preemption locks.
+                <strong className="text-sky-300">Figure 2.</strong> Algorithmic flowchart of the CBBA with Anomaly Filtering protocol. Phase 1 constructs bundles with kinematic and RF path loss degradation discounting; Phase 2 executes quorum validation, cryptographic epoch checks, Choi 2009 conflict table rules, and operator preemption locks.
               </div>
             </div>
 
             {/* Conflict Resolution Table */}
             <div className="space-y-2">
               <div className="text-xs font-mono font-bold text-slate-300">
-                Table 1: BFT-CBBA Extended Conflict Resolution Decision Matrix (Choi 2009 + BFT Security Rules)
+                Table 1: CBBA with Anomaly Filtering Extended Conflict Resolution Decision Matrix (Choi 2009 + Anomaly Security Rules)
               </div>
               <div className="border border-slate-800 rounded-lg overflow-x-auto bg-slate-900 font-mono text-[11px]">
                 <table className="w-full text-left">
@@ -612,7 +612,7 @@ Manned-Unmanned Teaming (MUM-T) fleets operating across heterogeneous domains (a
                 </div>
                 <p className="text-slate-300 font-sans text-xs leading-relaxed">
                   Let an operator force an override lock <span className="font-mono text-amber-300">&mu;<sub>j</sub> = 1</span> assigning task T<sub>j</sub> to asset A<sub>k</sub>. 
-                  BFT-CBBA converges to a conflict-free allocation in at most:
+                  CBBA with Anomaly Filtering converges to a conflict-free allocation in at most:
                 </p>
                 <div className="p-2.5 rounded bg-slate-950 text-emerald-400 text-xs">
                   T<sub>conv</sub> &le; N<sub>benign</sub> &middot; M &middot; D &middot; &Delta;t<sub>comm</sub>
@@ -638,13 +638,13 @@ Manned-Unmanned Teaming (MUM-T) fleets operating across heterogeneous domains (a
               <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950">
                 <img
                   src="/figures/fig3_empirical_benchmarks.jpg"
-                  alt="Figure 3: Empirical Performance Benchmarks of BFT-CBBA"
+                  alt="Figure 3: Empirical Performance Benchmarks of CBBA with Anomaly Filtering"
                   className="w-full h-auto object-cover max-h-[380px]"
                   referrerPolicy="no-referrer"
                 />
               </div>
               <div className="text-xs font-mono text-slate-400 leading-normal">
-                <strong className="text-sky-300">Figure 3.</strong> Empirical performance benchmarking of BFT-CBBA across 5,000 Monte Carlo configurations. (a) Mission task completion rate vs. Byzantine corrupted node fraction; (b) Convergence latency (ms) vs. stochastic RF packet drop rate; (c) Consensus conflict rate vs. network communication overhead (kB/s).
+                <strong className="text-sky-300">Figure 3.</strong> Empirical performance benchmarking of CBBA with Anomaly Filtering across 5,000 Monte Carlo configurations. (a) Mission task completion rate vs. Byzantine corrupted node fraction; (b) Convergence latency (ms) vs. stochastic RF packet drop rate; (c) Consensus conflict rate vs. network communication overhead (kB/s).
               </div>
             </div>
 
@@ -691,7 +691,7 @@ Manned-Unmanned Teaming (MUM-T) fleets operating across heterogeneous domains (a
                       <td className="py-2 px-3">84.2 ms</td>
                     </tr>
                     <tr className="bg-emerald-500/10 font-bold">
-                      <td className="py-2 px-3 text-emerald-400">BFT-CBBA (This Paper)</td>
+                      <td className="py-2 px-3 text-emerald-400">CBBA with Anomaly Filtering (This Paper)</td>
                       <td className="py-2 px-3 text-emerald-400">94.2%</td>
                       <td className="py-2 px-3 text-emerald-400">41.3 ms</td>
                       <td className="py-2 px-3 text-emerald-400">18.6 kB/s</td>
@@ -713,7 +713,7 @@ Manned-Unmanned Teaming (MUM-T) fleets operating across heterogeneous domains (a
               </h2>
             </div>
             <p className="text-sm text-slate-300">
-              BFT-CBBA establishes the first provably convergent, Byzantine-tolerant auction mechanism for heterogeneous MUM-T fleets operating in contested RF environments. By bounding adversary bids with physical kinematic limits, calculating real-time knife-edge diffraction penalties, and providing deterministic human preemption, BFT-CBBA guarantees mission continuity in contested operations.
+              CBBA with Anomaly Filtering establishes the first provably convergent, Byzantine-tolerant auction mechanism for heterogeneous MUM-T fleets operating in contested RF environments. By bounding adversary bids with physical kinematic limits, calculating real-time knife-edge diffraction penalties, and providing deterministic human preemption, CBBA with Anomaly Filtering guarantees mission continuity in contested operations.
             </p>
 
             <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 font-mono text-[11px] text-slate-400 space-y-2 max-h-72 overflow-y-auto">
@@ -723,7 +723,7 @@ Manned-Unmanned Teaming (MUM-T) fleets operating across heterogeneous domains (a
               <div>[4] M. Alighanbari and J. P. How, "Decentralized task assignment for uninhabited air vehicles in presence of arrival time constraints," in <em>Proc. IEEE CDC</em>, 2005.</div>
               <div>[5] S. S. Ponda, L. B. Johnson, and J. P. How, "Decentralized planning for complex missions with dynamic communication constraints," in <em>ACC</em>, 2010.</div>
               <div>[6] L. Lamport, R. Shostak, and M. Pease, "The Byzantine generals problem," <em>ACM TOPLAS</em>, vol. 4, no. 3, pp. 382–401, 1982.</div>
-              <div>[7] M. Castro and B. Liskov, "Practical Byzantine fault tolerance," in <em>OSDI</em>, vol. 99, 1999, pp. 173–186.</div>
+              <div>[7] M. Castro and B. Liskov, "Practical Byzantine-aware anomaly filtering," in <em>OSDI</em>, vol. 99, 1999, pp. 173–186.</div>
               <div>[8] J. Gielis, A. Pratt, and E. Stump, "Resilient multi-agent task allocation under adversarial communications," <em>Autonomous Robots</em>, vol. 46, pp. 881–898, 2022.</div>
               <div>[9] N. Buckman, H.-L. Choi, and J. P. How, "Adversarial resilience in decentralized multi-agent assignment," in <em>IEEE CDC</em>, 2020.</div>
               <div>[10] A. Whitten, K. Leahy, and M. Schwager, "Decentralized multi-agent planning with human operator preemption," <em>IEEE TCNS</em>, vol. 8, no. 3, pp. 1201–1212, 2021.</div>

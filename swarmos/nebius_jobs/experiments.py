@@ -25,7 +25,7 @@ from swarm_engine.agents import Agent, AgentStatus
 from swarm_engine.tasks import Task, TaskType, TaskStatus
 from swarm_engine.environment import SwarmEnvironment, Obstacle, ThreatZone
 from swarm_engine.cbba import CBBAEngine
-from swarm_engine.bft_cbba import ByzantineAnomalyFilter, BftAgentStatus
+from swarm_engine.anomaly_cbba import ByzantineAnomalyFilter, BftAgentStatus
 from swarm_engine.failures import FailureInjector
 from swarm_engine.metrics import SwarmMetricsTracker
 from ai_layer.safety_compiler import SafetyCompiler

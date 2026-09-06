@@ -626,7 +626,7 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
 
         ctx.fillStyle = '#ef4444';
         ctx.font = 'bold 9px monospace';
-        ctx.fillText('⚠ BFT EJECTED', ax - 32, ay + 38);
+        ctx.fillText('⚠ ANOMALY EJECTED', ax - 32, ay + 38);
       } else if (isSuspect) {
         ctx.strokeStyle = '#f59e0b';
         ctx.lineWidth = 1.5;

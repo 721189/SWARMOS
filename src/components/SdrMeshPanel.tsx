@@ -117,7 +117,7 @@ export const SdrMeshPanel: React.FC<SdrMeshPanelProps> = ({
             </span>
             <div>
               <h2 className="text-lg font-bold text-white tracking-wide">
-                Edge-Native Zero-Trust SDR Mesh &amp; Jetson Orin SLM
+                Edge-Native anomaly-aware SDR Mesh &amp; Jetson Orin SLM
               </h2>
               <p className="text-xs text-slate-400">
                 Tactical MANET Waveform Modeling, ChaCha20-Poly1305 Cryptography &amp; Onboard INT4 Edge LLMs
@@ -139,7 +139,7 @@ export const SdrMeshPanel: React.FC<SdrMeshPanelProps> = ({
         </div>
       </div>
 
-      {/* Grid: Tactical SDR Radio & Zero-Trust Crypto */}
+      {/* Grid: Tactical SDR Radio & anomaly-aware Crypto */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left 6 Cols: SDR Waveform Modeling */}
         <div className="lg:col-span-6 space-y-4">
@@ -230,7 +230,7 @@ export const SdrMeshPanel: React.FC<SdrMeshPanelProps> = ({
           </div>
         </div>
 
-        {/* Right 6 Cols: Zero-Trust Ephemeral Cryptography */}
+        {/* Right 6 Cols: anomaly-aware Ephemeral Cryptography */}
         <div className="lg:col-span-6 space-y-4">
           <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
@@ -238,7 +238,7 @@ export const SdrMeshPanel: React.FC<SdrMeshPanelProps> = ({
                 <span className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
                   <Lock className="w-4 h-4" />
                 </span>
-                <h3 className="text-sm font-bold text-white">Zero-Trust Ephemeral Cryptography</h3>
+                <h3 className="text-sm font-bold text-white">anomaly-aware Ephemeral Cryptography</h3>
               </div>
               <button
                 onClick={onToggleCryptoSuite}

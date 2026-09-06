@@ -387,7 +387,7 @@ Domain Coordination Summary:
    - Task T2 [RESCUE] awarded exclusively to VIPER-03 (Cargo Quad) holding HEAVY_CARGO payload.
    - Task T4 [SURVEIL] awarded exclusively to VIPER-04 (Lidar Quad) holding LIDAR_3D.
 4. Autonomous Dock-Recharge: Multirotor VIPER-02 battery prioritized for mobile inductive docking onto TITAN-01.
-5. Zero-Trust Layer: ChaCha20-Poly1305 nonce synchronized across all 6 ad-hoc SDR nodes. Replay attacks blocked.`,
+5. anomaly-aware Layer: ChaCha20-Poly1305 nonce synchronized across all 6 ad-hoc SDR nodes. Replay attacks blocked.`,
   });
 
   // --- Byzantine & GPS-Denied State ---
@@ -403,7 +403,7 @@ Domain Coordination Summary:
       'A5': { attack: 'NONE', trustScore: 100, status: 'TRUSTED', violations: [] },
       'A6': { attack: 'NONE', trustScore: 100, status: 'TRUSTED', violations: [] },
     },
-    bftThresholdPct: 66.7,
+    anomalyThresholdPct: 66.7,
     blockedPoisonBids: 0,
     spoofedVectorsMitigated: 0,
   });
@@ -511,7 +511,7 @@ Domain Coordination Summary:
     const operationalAgents = updatedAgents.filter((a) => {
       const byz = byzantineStateRef.current.byzantineAgents[a.id];
       if (byz && (byz.status === 'QUARANTINED' || byz.status === 'EJECTED')) {
-        return false; // BFT 2f+1 Quorum isolates quarantined/ejected nodes
+        return false; // Anomaly Filter isolates quarantined/ejected nodes
       }
       return a.health.propulsion > 0.1 && a.health.battery > 5 && a.status !== 'RECHARGING';
     });
@@ -562,7 +562,7 @@ Domain Coordination Summary:
         const pathCost = dist * 0.05;
         let marginalBid = Math.max(1, task.baseReward * temporalDecay - pathCost);
 
-        // BFT Defense: Detect and quarantine Byzantine Bid Poisoning
+        // Anomaly Defense: Detect and quarantine Byzantine Bid Poisoning
         if (byz && byz.attack === 'BID_POISON') {
           const rogueBid = 9999;
           const maxTheoretical = task.baseReward * 1.25;
@@ -1104,7 +1104,7 @@ Domain Coordination Summary:
   const toggleSdrCryptoSuite = () => {
     setSdrMeshState((prev) => {
       const nextSuite = prev.cryptoSuite === 'CHACHA20_POLY1305' ? 'CRYSTALS_KYBER_PQ' : 'CHACHA20_POLY1305';
-      addLog(`ZERO-TRUST: Swapped session cipher to ${nextSuite}.`);
+      addLog(`anomaly-aware: Swapped session cipher to ${nextSuite}.`);
       return {
         ...prev,
         cryptoSuite: nextSuite,

@@ -1,6 +1,6 @@
 # SWARMOS: Strategic Multi-Domain Autonomous Swarm Operating System
 
-> **Enterprise-Grade Decentralized Multi-Agent Swarm Intelligence**: Dynamic Consensus-Based Bundle Algorithm (CBBA), MUM-T Heterogeneous Fleet Coordination (Air + Ground + Surface), Zero-Trust Tactical SDR MANET, Byzantine Fault-Tolerant PNT Defense, ATAK/WinTAK Cursor-on-Target Gateway, and NVIDIA Jetson Orin Edge SLMs.
+> **Enterprise-Grade Decentralized Multi-Agent Swarm Intelligence**: Dynamic Consensus-Based Bundle Algorithm (CBBA), MUM-T Heterogeneous Fleet Coordination (Air + Ground + Surface), Zero-Trust Tactical SDR MANET, Byzantine-aware anomaly filtering PNT Defense, ATAK/WinTAK Cursor-on-Target Gateway, and NVIDIA Jetson Orin Edge SLMs.
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![CBBA-BFT Protocol](https://img.shields.io/badge/consensus-CBBA--BFT%20v2.4-emerald.svg)](https://ieeexplore.ieee.org/document/5072249)
@@ -13,7 +13,7 @@
 
 ## 🛰️ Overview
 
-**SWARMOS** is a production-grade, distributed multi-agent swarm coordination platform engineered for GPS-degraded, communication-constrained, and contested environments. It bridges high-level human commander directives (parsed via **NVIDIA Nemotron LLMs**) with decentralized, peer-to-peer auction consensus via **CBBA (Consensus-Based Bundle Algorithm)** running at the tactical edge.
+**SWARMOS** is a reproducible, distributed multi-agent swarm coordination platform engineered for GPS-degraded, communication-constrained, and contested environments. It bridges high-level human commander directives (parsed via **NVIDIA Nemotron LLMs**) with decentralized, peer-to-peer auction consensus via **CBBA (Consensus-Based Bundle Algorithm)** running at the tactical edge.
 
 ### Core Capabilities
 1. **Decentralized CBBA Auctioning**: Agents greedily construct task bundles and converge on optimal assignments through 1-hop wireless mesh consensus without any central single point of failure.
