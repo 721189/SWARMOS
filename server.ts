@@ -115,7 +115,7 @@ app.post("/api/experiments/ablation", async (req, res) => {
       }
     }
 
-    const algorithms = ["Static", "Greedy", "CBBA_Standard", "CBBA_Recovery", "SWARMOS"];
+    const algorithms = experimentOutput.algorithms_evaluated || ["Static", "Greedy", "CBBA_Standard", "CBBA_Recovery", "CBBA_BFT", "CBBA_Recovery_BFT", "SWARMOS"];
 
     const variants = algorithms.map(algoName => {
       const algoRows = summaryTable.filter(r => r.algorithm === algoName);
