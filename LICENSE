@@ -1,0 +1,27 @@
+# SWARMOS Academic & Research License
+Version 1.0, September 2026
+
+Copyright (c) 2026 Shivam Singh (IIT Madras). All Rights Reserved.
+
+## 1. PREAMBLE
+This license governs the use of the SWARMOS (Secure & Resilient Swarm Orchestration System) software. The software is provided for research, educational, and evaluation purposes only.
+
+## 2. GRANT OF LICENSE
+Subject to the terms of this License, the Author (Shivam Singh) hereby grants you a non-exclusive, non-transferable, royalty-free license to:
+*   View and study the source code.
+*   Execute the software for personal, non-commercial research or educational purposes.
+*   Modify the code for personal use, provided that the modifications are not redistributed.
+
+## 3. RESTRICTIONS
+You are STRICTLY PROHIBITED from:
+*   **Redistribution**: You may not redistribute, sub-license, or lease the source code or compiled binaries to any third party.
+*   **Commercial Use**: You may not use this software for any commercial purpose, including but not limited to, providing services for a fee or building commercial hardware.
+*   **Attribution & Plagiarism**: You may not remove the Author's name or the IIT Madras affiliation from the source code or documentation. You may not claim this work as your own or use it in any publication without explicit citation.
+*   **Sublicensing**: You may not grant any third party the rights granted to you under this license.
+
+## 4. ATTRIBUTION REQUIREMENT
+Any scientific or technical publication resulting from the use of this software must include the following citation:
+> Singh, S. (2026). SWARMOS: Secure & Resilient Swarm Orchestration System. IIT Madras Research Initiative.
+
+## 5. NO WARRANTY
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY.

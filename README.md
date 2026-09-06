@@ -91,4 +91,14 @@ SWARMOS is built with cross-platform scalability in mind, aligning with the high
 - **Google Developer**: Integrated with Gemini-powered strategic mission logic.
 
 ---
-*Developed by a First-Year IIT Madras Student Researcher. Open for collaboration.*
+*Developed by a First-Year IIT Madras Student Researcher. Protected by SWARMOS Academic License.*
+
+## ⚖️ Intellectual Property & Legal Protection
+SWARMOS is the intellectual property of **Shivam Singh (IIT Madras)**. 
+
+*   **Restricted Use**: This framework is released under a custom **Research-Only License**. Commercial use, redistribution, or unauthorized derivation is strictly prohibited.
+*   **Anti-Plagiarism**: Any attempt to copy or claim this work as your own will be met with legal and academic action. 
+*   **Citation Required**: Any research leveraging this code must cite: 
+    > Singh, S. (2026). SWARMOS: Secure & Resilient Swarm Orchestration System. IIT Madras.
+
+For commercial licensing inquiries, please contact the author.
