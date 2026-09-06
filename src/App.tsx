@@ -17,6 +17,8 @@ import {
   Sparkles,
   Satellite,
   Lock,
+  Unlock,
+  KeyRound,
   Boxes,
   Binary,
   Mountain,
@@ -39,6 +41,7 @@ import { SdrMeshPanel } from './components/SdrMeshPanel';
 import { CbbaDebuggerPanel } from './components/CbbaDebuggerPanel';
 import { TerrainRelayPanel } from './components/TerrainRelayPanel';
 import { RedTeamSandboxPanel } from './components/RedTeamSandboxPanel';
+import { useResearcherAccess, ResearcherUnlockModal } from './components/ResearcherAccess';
 
 type NavTab = 
   | 'simulation' 
@@ -62,6 +65,8 @@ export default function App() {
     showUwbRangingMesh: false,
     showCotCallsigns: true,
   });
+  const [isUnlockModalOpen, setIsUnlockModalOpen] = useState(false);
+  const { isUnlocked, unlock, lock } = useResearcherAccess();
 
   const {
     agents,
@@ -309,32 +314,61 @@ export default function App() {
               <span>Nebius Matrix</span>
             </button>
 
-            <button
-              id="nav-tab-storyboard"
-              onClick={() => setActiveTab('storyboard')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all whitespace-nowrap ${
-                activeTab === 'storyboard'
-                  ? 'bg-sky-500 text-slate-950 font-bold shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-              }`}
-            >
-              <Film className="w-3.5 h-3.5" />
-              <span>Demo Script</span>
-            </button>
+            {/* Author / Researcher Protected Tabs */}
+            {isUnlocked ? (
+              <>
+                <button
+                  id="nav-tab-storyboard"
+                  onClick={() => setActiveTab('storyboard')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all whitespace-nowrap ${
+                    activeTab === 'storyboard'
+                      ? 'bg-sky-500 text-slate-950 font-bold shadow-sm'
+                      : 'text-amber-400/90 hover:text-amber-300 hover:bg-slate-800/50'
+                  }`}
+                >
+                  <Film className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Demo Script</span>
+                </button>
 
-            <button
-              id="nav-tab-whitepaper"
-              onClick={() => setActiveTab('whitepaper')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all whitespace-nowrap ${
-                activeTab === 'whitepaper'
-                  ? 'bg-sky-500 text-slate-950 font-bold shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-              }`}
-            >
-              <BookOpen className="w-3.5 h-3.5" />
-              <span>Report</span>
-            </button>
+                <button
+                  id="nav-tab-whitepaper"
+                  onClick={() => setActiveTab('whitepaper')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all whitespace-nowrap ${
+                    activeTab === 'whitepaper'
+                      ? 'bg-sky-500 text-slate-950 font-bold shadow-sm'
+                      : 'text-emerald-400/90 hover:text-emerald-300 hover:bg-slate-800/50'
+                  }`}
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Report</span>
+                </button>
+              </>
+            ) : null}
           </nav>
+
+          {/* Author / Researcher Access Quick Toggle */}
+          <div className="flex items-center gap-2">
+            {isUnlocked ? (
+              <button
+                onClick={lock}
+                title="Researcher Mode Unlocked. Click to re-lock."
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-mono transition-colors"
+              >
+                <Unlock className="w-3.5 h-3.5" />
+                <span className="hidden md:inline">Author Mode</span>
+                <span className="text-[10px] text-emerald-500">(Lock)</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => setIsUnlockModalOpen(true)}
+                title="Author / Researcher Key Access"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 text-xs font-mono transition-colors"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-slate-400" />
+                <span className="hidden md:inline">Author Access</span>
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
@@ -549,7 +583,30 @@ export default function App() {
         {/* Tab 8: 3-Minute Demo Video Script */}
         {activeTab === 'storyboard' && (
           <div className="animate-in fade-in duration-150">
-            <DemoScriptViewer />
+            {isUnlocked ? (
+              <DemoScriptViewer />
+            ) : (
+              <div className="p-8 rounded-2xl bg-slate-900 border border-slate-800 text-center max-w-lg mx-auto space-y-4 shadow-2xl my-12">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center mx-auto">
+                  <Lock className="w-6 h-6" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-base font-bold text-white">
+                    Demo Script Section Protected
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    This section is restricted to author evaluation. Enter your author passkey to view the script.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setIsUnlockModalOpen(true)}
+                  className="px-4 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-bold transition-all shadow-md inline-flex items-center gap-2"
+                >
+                  <KeyRound className="w-4 h-4" />
+                  Unlock Author Access
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -563,10 +620,41 @@ export default function App() {
         {/* Tab 10: Technical Research Whitepaper */}
         {activeTab === 'whitepaper' && (
           <div className="animate-in fade-in duration-150">
-            <TechnicalReportViewer />
+            {isUnlocked ? (
+              <TechnicalReportViewer />
+            ) : (
+              <div className="p-8 rounded-2xl bg-slate-900 border border-slate-800 text-center max-w-lg mx-auto space-y-4 shadow-2xl my-12">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
+                  <Lock className="w-6 h-6" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-base font-bold text-white">
+                    IEEE Research Preprint &amp; Figures Protected
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    The 6-page IEEE Transactions research paper, LaTeX bundle, and figures are restricted to author evaluation.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setIsUnlockModalOpen(true)}
+                  className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-all shadow-md inline-flex items-center gap-2"
+                >
+                  <KeyRound className="w-4 h-4" />
+                  Unlock Author Access
+                </button>
+              </div>
+            )}
           </div>
         )}
       </main>
+
+      {/* Author Researcher Unlock Modal */}
+      <ResearcherUnlockModal
+        isOpen={isUnlockModalOpen}
+        onClose={() => setIsUnlockModalOpen(false)}
+        onSuccess={() => {}}
+        unlock={unlock}
+      />
 
       {/* Explain Why [X-AI] Forensic Modal */}
       {isExplainOpen && (
