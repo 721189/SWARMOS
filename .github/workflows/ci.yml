@@ -1,0 +1,54 @@
+name: SWARMOS CI Pipeline
+
+on:
+  push:
+    branches: [ "main", "research-hardening" ]
+  pull_request:
+    branches: [ "main", "research-hardening" ]
+
+jobs:
+  python-simulation-core:
+    name: Python Simulation Core
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.10"
+
+    - name: Validate Core Syntax
+      run: |
+        python3 -m compileall swarmos/
+
+    - name: Execute Behavioral & Invariant Tests
+      run: |
+        PYTHONPATH=swarmos python3 -m unittest discover -s swarmos/tests -p "test_*.py" -v
+
+    - name: Execute Reduced Matrix Audit
+      run: |
+        PYTHONPATH=swarmos python3 swarmos/research/reproduce.py --reduced
+
+  typescript-frontend:
+    name: Node.js Frontend & API
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js 20
+      uses: actions/setup-node@v4
+      with:
+        node-version: "20"
+        cache: "npm"
+
+    - name: Install Dependencies
+      run: npm ci || npm install
+
+    - name: TypeScript Static Analysis (Lint)
+      run: npm run lint
+
+    - name: Production Build (Vite + esbuild)
+      run: npm run build
