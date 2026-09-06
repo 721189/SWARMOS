@@ -15,6 +15,10 @@
       {
         "name": "high_interference",
         "packet_loss_rate": 0.35
+      },
+      {
+        "name": "adversarial",
+        "packet_loss_rate": 0.0
       }
     ]
   }

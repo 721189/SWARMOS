@@ -254,16 +254,22 @@ def run_single_baseline_trial(
                     failure_injector.inject_motor_failure(fa_id, "Catastrophic loss")
                     failed_agents.append(fa_id)
                 failure_injector.inject_rf_jamming((600.0, 350.0), radius=260.0)
-            elif failure_mode == "adversarial_nodes":
+            elif failure_mode == "adversarial":
                 if fleet_size > 1:
                     adv_id = "A1"
                     if adv_id in agents and len(tasks) > 0:
-                        t_id = list(tasks.keys())[0]
-                        agents[adv_id].winning_bids[t_id] = 9999.0
-                        agents[adv_id].winning_agents[t_id] = adv_id
-                        agents[adv_id].bundle = [t_id]
-                        agents[adv_id].path = [t_id]
-                        # This node will try to poison the network if CBBA_BFT is not used
+                        # Poisoning: Claiming tasks with infinite bids to deny the swarm
+                        for t_id in list(tasks.keys())[:int(len(tasks)*0.5)]:
+                            agents[adv_id].winning_bids[t_id] = 999999.0
+                            agents[adv_id].winning_agents[t_id] = adv_id
+                            if t_id not in agents[adv_id].bundle:
+                                agents[adv_id].bundle.append(t_id)
+                                agents[adv_id].path.append(t_id)
+                        
+                        # Malicious behavior: Claim but sabotage execution
+                        agents[adv_id].health.propulsion = 0.0 
+                        agents[adv_id].status = AgentStatus.IDLE
+                        logger.warning(f"Adversarial Node {adv_id} has poisoned the auction and sabotaged propulsion.")
             
 
             # Re-allocation / Recovery Response
@@ -400,7 +406,7 @@ def run_single_baseline_trial(
         "observed_packet_loss_pct": kpis["observed_packet_loss_pct"]
     }
 
-from swarmos.utils.analysis import compute_stats, compute_t_test_p_value, compute_cohens_d, get_significance_stars
+from swarmos.utils.analysis import compute_stats, compute_paired_t_test, compute_cohens_d, get_significance_stars
 
 def run_experiment_matrix(
     matrix_path: str = "swarmos/nebius_jobs/matrix.json",
@@ -523,7 +529,8 @@ def run_experiment_matrix(
             group_a = res["_raw_comp_rates"]
             group_b = baseline_res["_raw_comp_rates"]
             
-            res["p_value_vs_baseline"] = compute_t_test_p_value(group_a, group_b)
+            # Using Paired T-Test as seeds are exactly matched between algorithms
+            res["p_value_vs_baseline"] = compute_paired_t_test(group_a, group_b)
             res["cohens_d_vs_baseline"] = compute_cohens_d(group_a, group_b)
             res["significance_stars"] = get_significance_stars(res["p_value_vs_baseline"])
 

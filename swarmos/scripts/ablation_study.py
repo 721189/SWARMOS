@@ -6,7 +6,8 @@ from swarmos.utils.logger import logger
 def run_ablation_study():
     configs = [
         {"fleet_size": 8, "task_count": 15, "scen": "nominal", "p_loss": 0.0},
-        {"fleet_size": 8, "task_count": 15, "scen": "adversarial", "p_loss": 0.25}
+        {"fleet_size": 8, "task_count": 15, "scen": "adversarial", "p_loss": 0.1},
+        {"fleet_size": 8, "task_count": 20, "scen": "loss_50_catastrophic", "p_loss": 0.2}
     ]
     
     seeds = range(1000, 1030) # 30 seeds per ablation
