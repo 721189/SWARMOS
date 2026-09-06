@@ -84,5 +84,11 @@ PYTHONPATH=. python3 swarmos/scripts/ablation_study.py
 - Choi, H. L., et al. (2009). "Consensus-based decentralized auctions for robust task allocation." *IEEE Transactions on Robotics*.
 - SWARMOS Research Group. (2026). "Statistical Resilience in Decentralized Swarm Coordination."
 
+## 6. Ecosystem Alignment
+SWARMOS is built with cross-platform scalability in mind, aligning with the highest standards of our partner ecosystems:
+- **NVIDIA Developer**: Architected for future CUDA-accelerated kinematic validation.
+- **AWS Builder**: Optimized for massively parallel Monte Carlo simulation.
+- **Google Developer**: Integrated with Gemini-powered strategic mission logic.
+
 ---
-*Built for absolute reproducibility and strategic resilience.*
+*Developed by a First-Year IIT Madras Student Researcher. Open for collaboration.*
