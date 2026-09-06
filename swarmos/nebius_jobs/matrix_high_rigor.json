@@ -1,0 +1,21 @@
+
+{
+  "benchmark_name": "SWARMOS High-Rigor Significance Suite",
+  "artifact_version": "2.1.0",
+  "trials_per_config": 20,
+  "parameter_sweep": {
+    "fleet_size": [6, 12],
+    "task_density": [10, 20],
+    "communication_ranges_m": [300.0],
+    "failure_scenarios": [
+      {
+        "name": "nominal",
+        "packet_loss_rate": 0.0
+      },
+      {
+        "name": "high_interference",
+        "packet_loss_rate": 0.35
+      }
+    ]
+  }
+}

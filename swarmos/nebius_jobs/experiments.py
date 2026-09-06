@@ -400,6 +400,8 @@ def run_single_baseline_trial(
         "observed_packet_loss_pct": kpis["observed_packet_loss_pct"]
     }
 
+from swarmos.utils.analysis import compute_stats, compute_t_test_p_value, compute_cohens_d, get_significance_stars
+
 def run_experiment_matrix(
     matrix_path: str = "swarmos/nebius_jobs/matrix.json",
     reduced_benchmark: bool = False
@@ -504,12 +506,35 @@ def run_experiment_matrix(
                             "packets_delivered_mean": round(mean_deliv, 1),
                             "packets_dropped_mean": round(mean_drop, 1),
                             "observed_packet_loss_pct": round(mean_loss, 1),
-                            "trials": len(trial_metrics)
+                            "trials": len(trial_metrics),
+                            "_raw_comp_rates": comp_rates # Hidden field for significance
                         })
+
+    # Post-process for Statistical Significance
+    baseline_algo = "CBBA_Standard"
+    for res in results:
+        if res["algorithm"] == baseline_algo: continue
+        
+        config_key = (res["fleet_size"], res["task_count"], res["failure_mode"], res["communication_range"])
+        baseline_res = next((r for r in results if r["algorithm"] == baseline_algo and 
+                             (r["fleet_size"], r["task_count"], r["failure_mode"], r["communication_range"]) == config_key), None)
+        
+        if baseline_res:
+            group_a = res["_raw_comp_rates"]
+            group_b = baseline_res["_raw_comp_rates"]
+            
+            res["p_value_vs_baseline"] = compute_t_test_p_value(group_a, group_b)
+            res["cohens_d_vs_baseline"] = compute_cohens_d(group_a, group_b)
+            res["significance_stars"] = get_significance_stars(res["p_value_vs_baseline"])
+
+    # Remove raw data before final serialization
+    for res in results:
+        if "_raw_comp_rates" in res:
+            del res["_raw_comp_rates"]
 
     total_configs = len(results)
     total_individual_trials = sum(r.get("trials", 1) for r in results)
-
+    
     output_payload = {
         "audit_timestamp": datetime.now(timezone.utc).isoformat(),
         "artifact_version": ARTIFACT_SCHEMA_VERSION,
