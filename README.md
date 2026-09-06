@@ -6,6 +6,7 @@
 [![AI Integration](https://img.shields.io/badge/AI-NVIDIA_Nemotron_4_340B-green.svg)]()
 [![Test Suite](https://img.shields.io/badge/Tests-100%25_Passing-brightgreen.svg)]()
 
+swarmos-32ip3agh7-721189s-projects.vercel.app
 SWARMOS is an enterprise-grade, decentralized, fault-resilient multi-agent coordination and mission operating system designed for **Denied, Degraded, Intermittent, and Limited (DDIL)** tactical environments. It unifies distributed consensus auction protocols with deterministic safety compilation, physical stochastic RF mesh networking, and dynamic fault tolerance.
 
 ---
