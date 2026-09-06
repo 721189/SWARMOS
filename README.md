@@ -30,12 +30,12 @@ We provide a comprehensive Cartesian matrix benchmarking tool to reproduce our e
 
 To run the accelerated ablation matrix locally:
 ```bash
-PYTHONPATH=swarmos python3 swarmos/research/reproduce.py --reduced
+PYTHONPATH=. python3 swarmos/research/reproduce.py --reduced
 ```
 
 To run a single deterministic scenario (e.g., 50% catastrophic packet loss with 16 nodes, seed=42):
 ```bash
-PYTHONPATH=swarmos python3 swarmos/research/reproduce.py --algo SWARMOS --fleet 16 --tasks 25 --failure loss_50_catastrophic --seed 42
+PYTHONPATH=. python3 swarmos/research/reproduce.py --algo SWARMOS --fleet 16 --tasks 25 --failure loss_50_catastrophic --seed 42
 ```
 
 ### Launching the Dashboard
