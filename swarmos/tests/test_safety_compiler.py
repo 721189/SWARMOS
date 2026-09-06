@@ -1,5 +1,5 @@
 import unittest
-from ai_layer.safety_compiler import SafetyCompiler
+from swarmos.ai_layer.safety_compiler import SafetyCompiler
 
 class TestSafetyCompiler(unittest.TestCase):
     def setUp(self):

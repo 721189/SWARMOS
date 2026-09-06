@@ -7,14 +7,14 @@ distributed CBBA auction cycles, fault monitoring, and explainability telemetry.
 import math
 import time
 from typing import Dict, List, Optional, Any
-from utils.config import SwarmConfig, DEFAULT_CONFIG
-from utils.logger import logger
-from swarm_engine.agents import Agent, AgentStatus
-from swarm_engine.tasks import Task, TaskStatus
-from swarm_engine.environment import SwarmEnvironment, Obstacle, ThreatZone
-from swarm_engine.cbba import CBBAEngine
-from swarm_engine.failures import FailureInjector
-from swarm_engine.metrics import SwarmMetricsTracker
+from swarmos.utils.config import SwarmConfig, DEFAULT_CONFIG
+from swarmos.utils.logger import logger
+from swarmos.swarm_engine.agents import Agent, AgentStatus
+from swarmos.swarm_engine.tasks import Task, TaskStatus
+from swarmos.swarm_engine.environment import SwarmEnvironment, Obstacle, ThreatZone
+from swarmos.swarm_engine.cbba import CBBAEngine
+from swarmos.swarm_engine.failures import FailureInjector
+from swarmos.swarm_engine.metrics import SwarmMetricsTracker
 from .mission_parser import MissionParser
 from .replanner import DynamicReplanner
 from .explainer import SwarmExplainer

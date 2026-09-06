@@ -7,8 +7,8 @@ import json
 import os
 import re
 from typing import Dict, List, Any, Optional
-from swarm_engine.tasks import Task, TaskType, TaskStatus
-from utils.logger import logger
+from swarmos.swarm_engine.tasks import Task, TaskType, TaskStatus
+from swarmos.utils.logger import logger
 
 NEMOTRON_SYSTEM_PROMPT = """You are the SWARMOS Mission Parser AI powered by NVIDIA Nemotron.
 Your role is to translate high-level natural language tactical mission briefings into a structured swarm task manifest.

@@ -1,8 +1,8 @@
 import unittest
-from swarm_engine.agents import Agent
-from swarm_engine.tasks import Task, TaskType, TaskStatus
-from swarm_engine.environment import SwarmEnvironment
-from swarm_engine.cbba import CBBAEngine
+from swarmos.swarm_engine.agents import Agent
+from swarmos.swarm_engine.tasks import Task, TaskType, TaskStatus
+from swarmos.swarm_engine.environment import SwarmEnvironment
+from swarmos.swarm_engine.cbba import CBBAEngine
 
 class TestCBBAEngine(unittest.TestCase):
     def setUp(self):

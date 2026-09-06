@@ -17,10 +17,10 @@ import time
 # Ensure swarmos root is in path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from utils.config import DEFAULT_CONFIG
-from utils.logger import logger
-from ai_layer.orchestrator import SwarmOrchestrator
-from swarm_engine.failures import FailureType
+from swarmos.utils.config import DEFAULT_CONFIG
+from swarmos.utils.logger import logger
+from swarmos.ai_layer.orchestrator import SwarmOrchestrator
+from swarmos.swarm_engine.failures import FailureType
 
 def run_headless_simulation(orchestrator: SwarmOrchestrator, duration: float = 20.0):
     """Headless simulation runner for servers and CI pipelines."""

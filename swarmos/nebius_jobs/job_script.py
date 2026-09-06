@@ -16,7 +16,7 @@ try:
 except ImportError:
     HAS_NEBIUS_SDK = False
 
-from utils.logger import logger
+from swarmos.utils.logger import logger
 from nebius_jobs.experiments import run_experiment_matrix
 
 def parse_args():

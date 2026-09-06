@@ -6,11 +6,11 @@ threat perimeter expansion, battery starvation), and orchestrates CBBA re-auctio
 
 import time
 from typing import Dict, List, Set, Tuple, Any
-from swarm_engine.agents import Agent, AgentStatus
-from swarm_engine.tasks import Task, TaskStatus
-from swarm_engine.environment import SwarmEnvironment
-from swarm_engine.cbba import CBBAEngine
-from utils.logger import logger
+from swarmos.swarm_engine.agents import Agent, AgentStatus
+from swarmos.swarm_engine.tasks import Task, TaskStatus
+from swarmos.swarm_engine.environment import SwarmEnvironment
+from swarmos.swarm_engine.cbba import CBBAEngine
+from swarmos.utils.logger import logger
 
 class DynamicReplanner:
     def __init__(self, env: SwarmEnvironment, cbba_engine: CBBAEngine):

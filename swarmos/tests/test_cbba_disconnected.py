@@ -1,8 +1,8 @@
 import unittest
-from swarm_engine.agents import Agent
-from swarm_engine.tasks import Task, TaskType
-from swarm_engine.environment import SwarmEnvironment
-from swarm_engine.cbba import CBBAEngine, AuctionTermination
+from swarmos.swarm_engine.agents import Agent
+from swarmos.swarm_engine.tasks import Task, TaskType
+from swarmos.swarm_engine.environment import SwarmEnvironment
+from swarmos.swarm_engine.cbba import CBBAEngine, AuctionTermination
 
 class TestCBBADisconnected(unittest.TestCase):
     def test_partitioned_network(self):

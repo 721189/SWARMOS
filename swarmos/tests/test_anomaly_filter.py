@@ -1,9 +1,9 @@
 import unittest
-from swarm_engine.anomaly_cbba import ByzantineAnomalyFilter, BftAgentStatus
-from swarm_engine.cbba import CBBAEngine
-from swarm_engine.agents import Agent
-from swarm_engine.tasks import Task, TaskType
-from swarm_engine.environment import SwarmEnvironment
+from swarmos.swarm_engine.anomaly_cbba import ByzantineAnomalyFilter, BftAgentStatus
+from swarmos.swarm_engine.cbba import CBBAEngine
+from swarmos.swarm_engine.agents import Agent
+from swarmos.swarm_engine.tasks import Task, TaskType
+from swarmos.swarm_engine.environment import SwarmEnvironment
 
 class TestBftConsensus(unittest.TestCase):
     def setUp(self):

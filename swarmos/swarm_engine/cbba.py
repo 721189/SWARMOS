@@ -184,43 +184,69 @@ class CBBAEngine:
                             self._record_decision(i_id, task_id, "REJECT_BFT", reason or "Poisoned BFT bid")
                             continue
                             
+
                     action = "LEAVE"
-                    s_im = agent_i.timestamps.get(z_i, 0.0) if z_i else 0.0
-                    s_km = agent_k.timestamps.get(z_i, 0.0) if z_i else 0.0
-                    s_ik = agent_i.timestamps.get(k_id, 0.0)
-                    
-                    if z_i is None:
-                        if z_k is not None and y_k > 0: action = "UPDATE"
-                    elif z_i == z_k:
+                    if z_k == k_id:
+                        if z_i == i_id:
+                            if y_k > y_i: action = "UPDATE"
+                            elif abs(y_k - y_i) <= self.bid_epsilon and k_id < i_id: action = "UPDATE"
+                            else: action = "LEAVE"
+                        elif z_i == k_id:
+                            action = "UPDATE"
+                        elif z_i not in (i_id, k_id, None):
+                            m_id = z_i
+                            if agent_k.timestamps.get(m_id, 0.0) > agent_i.timestamps.get(m_id, 0.0):
+                                action = "UPDATE"
+                            elif y_k > y_i:
+                                action = "UPDATE"
+                            else:
+                                action = "LEAVE"
+                        else: # z_i is None
+                            action = "UPDATE"
+                    elif z_k == i_id:
+                        if z_i == i_id: action = "LEAVE"
+                        elif z_i == k_id: action = "RESET"
+                        elif z_i not in (i_id, k_id, None): action = "LEAVE"
+                        else: action = "LEAVE"
+                    elif z_k not in (i_id, k_id, None):
+                        m_id = z_k
+                        if z_i == i_id:
+                            if agent_k.timestamps.get(m_id, 0.0) > agent_i.timestamps.get(m_id, 0.0): action = "UPDATE"
+                            elif y_k > y_i: action = "UPDATE"
+                            elif abs(y_k - y_i) <= self.bid_epsilon and m_id < i_id: action = "UPDATE"
+                            else: action = "LEAVE"
+                        elif z_i == k_id:
+                            if agent_k.timestamps.get(m_id, 0.0) > agent_i.timestamps.get(m_id, 0.0): action = "UPDATE"
+                            else: action = "RESET"
+                        elif z_i == m_id:
+                            if agent_k.timestamps.get(m_id, 0.0) > agent_i.timestamps.get(m_id, 0.0): action = "UPDATE"
+                            else: action = "LEAVE"
+                        elif z_i not in (i_id, k_id, m_id, None):
+                            n_id = z_i
+                            t_k_m = agent_k.timestamps.get(m_id, 0.0)
+                            t_i_m = agent_i.timestamps.get(m_id, 0.0)
+                            t_k_n = agent_k.timestamps.get(n_id, 0.0)
+                            t_i_n = agent_i.timestamps.get(n_id, 0.0)
+                            
+                            if t_k_m > t_i_m and t_k_n > t_i_n: action = "UPDATE"
+                            elif t_k_m > t_i_m and t_k_n <= t_i_n:
+                                if y_k > y_i: action = "UPDATE"
+                                elif abs(y_k - y_i) <= self.bid_epsilon and m_id < n_id: action = "UPDATE"
+                                else: action = "LEAVE"
+                            elif t_k_m <= t_i_m and t_k_n > t_i_n: action = "UPDATE"
+                            elif t_k_m <= t_i_m and t_k_n <= t_i_n:
+                                if y_k > y_i: action = "UPDATE"
+                                else: action = "LEAVE"
+                        else: # z_i is None
+                            action = "UPDATE"
+                    else: # z_k is None
                         if z_i == i_id: action = "LEAVE"
                         elif z_i == k_id: action = "UPDATE"
-                        else:
-                            if s_km > s_im or (s_km == s_im and y_k > y_i): action = "UPDATE"
-                    elif z_i == i_id:
-                        if z_k == k_id:
-                            if y_k > y_i + self.bid_epsilon: action = "UPDATE"
-                            elif abs(y_k - y_i) <= self.bid_epsilon and k_id < i_id: action = "UPDATE"
-                        elif z_k is None: action = "LEAVE"
-                        else:
-                            if y_k > y_i + self.bid_epsilon: action = "UPDATE"
-                    elif z_i == k_id:
-                        if z_k is None: action = "RESET"
-                        else: action = "UPDATE"
-                    else:
-                        m = z_i
-                        s_km_current = agent_k.timestamps.get(m, 0.0)
-                        s_im_current = agent_i.timestamps.get(m, 0.0)
-                        if z_k == k_id:
-                            if s_km_current > s_im_current and y_k > y_i: action = "UPDATE"
-                            elif s_kk > s_im_current and y_k > y_i: action = "UPDATE"
-                        elif z_k == i_id:
-                            if s_km_current > s_im_current: action = "RESET"
-                        elif z_k is None:
-                            if s_km_current > s_im_current: action = "RESET"
-                        else:
-                            if s_km_current > s_im_current and y_k > y_i: action = "UPDATE"
-                            elif s_km_current > s_im_current and y_k <= y_i: action = "RESET"
-                    
+                        elif z_i not in (i_id, k_id, None):
+                            m_id = z_i
+                            if agent_k.timestamps.get(m_id, 0.0) > agent_i.timestamps.get(m_id, 0.0): action = "UPDATE"
+                            else: action = "LEAVE"
+                        else: action = "LEAVE"
                     if action == "UPDATE":
                         if agent_i.winning_agents.get(task_id) != z_k or abs(agent_i.winning_bids.get(task_id, 0.0) - y_k) > self.bid_epsilon:
                             agent_i.winning_agents[task_id] = z_k

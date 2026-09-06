@@ -19,16 +19,16 @@ import time
 import math
 from typing import Dict, List, Any, Tuple
 
-from utils.config import SwarmConfig
-from utils.logger import logger
-from swarm_engine.agents import Agent, AgentStatus
-from swarm_engine.tasks import Task, TaskType, TaskStatus
-from swarm_engine.environment import SwarmEnvironment, Obstacle, ThreatZone
-from swarm_engine.cbba import CBBAEngine
-from swarm_engine.anomaly_cbba import ByzantineAnomalyFilter, BftAgentStatus
-from swarm_engine.failures import FailureInjector
-from swarm_engine.metrics import SwarmMetricsTracker
-from ai_layer.safety_compiler import SafetyCompiler
+from swarmos.utils.config import SwarmConfig
+from swarmos.utils.logger import logger
+from swarmos.swarm_engine.agents import Agent, AgentStatus
+from swarmos.swarm_engine.tasks import Task, TaskType, TaskStatus
+from swarmos.swarm_engine.environment import SwarmEnvironment, Obstacle, ThreatZone
+from swarmos.swarm_engine.cbba import CBBAEngine
+from swarmos.swarm_engine.anomaly_cbba import ByzantineAnomalyFilter, BftAgentStatus
+from swarmos.swarm_engine.failures import FailureInjector
+from swarmos.swarm_engine.metrics import SwarmMetricsTracker
+from swarmos.ai_layer.safety_compiler import SafetyCompiler
 
 def generate_deterministic_tasks(
     task_count: int,

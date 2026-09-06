@@ -7,10 +7,10 @@ threat fields, RF jamming bubbles, obstacles, and task objectives.
 import math
 from typing import Dict, List, Tuple, Optional
 import pygame
-from swarm_engine.agents import Agent, AgentStatus
-from swarm_engine.tasks import Task, TaskStatus
-from swarm_engine.environment import SwarmEnvironment, Obstacle, ThreatZone
-from utils.config import DEFAULT_CONFIG
+from swarmos.swarm_engine.agents import Agent, AgentStatus
+from swarmos.swarm_engine.tasks import Task, TaskStatus
+from swarmos.swarm_engine.environment import SwarmEnvironment, Obstacle, ThreatZone
+from swarmos.utils.config import DEFAULT_CONFIG
 
 class SwarmVisualizer:
     def __init__(self, surface: pygame.Surface, font_small: pygame.font.Font, font_large: pygame.font.Font):

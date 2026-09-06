@@ -1,0 +1,17 @@
+{
+  "fleet_size": 16,
+  "task_count": 50,
+  "algorithm": "SWARMOS",
+  "failure_mode": "none",
+  "communication_range": 500.0,
+  "packet_loss": 0.0,
+  "sim_time_sec": 34.0,
+  "mission_completion": 100.0,
+  "mean_convergence_ms": 1013.26,
+  "mean_replan_latency": 0.0,
+  "fleet_survival_pct": 100.0,
+  "packets_generated": 2520,
+  "packets_delivered": 2520,
+  "packets_dropped": 0,
+  "observed_packet_loss_pct": 0.0
+}

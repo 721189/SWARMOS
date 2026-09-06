@@ -5,7 +5,7 @@ import uuid
 import sys
 import os
 
-from nebius_jobs.experiments import run_single_baseline_trial, run_experiment_matrix
+from swarmos.nebius_jobs.experiments import run_single_baseline_trial, run_experiment_matrix
 
 def main():
     parser = argparse.ArgumentParser(description="SWARMOS Experiment Reproduction CLI")
