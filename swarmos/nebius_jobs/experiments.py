@@ -254,7 +254,7 @@ def run_single_baseline_trial(
                     failure_injector.inject_motor_failure(fa_id, "Catastrophic loss")
                     failed_agents.append(fa_id)
                 failure_injector.inject_rf_jamming((600.0, 350.0), radius=260.0)
-            elif failure_mode == "adversarial":
+            elif failure_mode == "adversarial_nodes":
                 if fleet_size > 1:
                     adv_id = "A1"
                     if adv_id in agents and len(tasks) > 0:

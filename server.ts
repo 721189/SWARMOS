@@ -4,10 +4,65 @@ import fs from "fs";
 import { execFileSync } from "child_process";
 import { createServer as createViteServer } from "vite";
 
+import { ai } from "./lib/gemini";
+import { Type } from "@google/genai";
+
 const app = express();
 const PORT = 3000;
 
 app.use(express.json());
+
+// API: Gemini Strategic Mission Decomposition
+app.post("/api/gemini/strategic-plan", async (req, res) => {
+  try {
+    const { mission_prompt = "Execute high-stakes reconnaissance across the north-east sector" } = req.body;
+
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(503).json({ error: "Gemini API key not configured. Please add it to your secrets." });
+    }
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.8-flash",
+      contents: `Decompose the following high-level drone swarm mission into technical task parameters for a CBBA (Consensus-Based Bundle Algorithm) coordination engine: "${mission_prompt}"`,
+      config: {
+        systemInstruction: "You are the SWARMOS Strategic Mission Planner. Your goal is to translate human natural language mission intents into machine-readable task payloads. Focus on mission priority, required payloads (sensors), and geographic distribution.",
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            mission_name: { type: Type.STRING },
+            strategic_priority: { type: Type.NUMBER, description: "Scale 1-10" },
+            tasks: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  task_type: { type: Type.STRING, enum: ["RECON", "DELIVERY", "RESCUE", "MONITORING"] },
+                  location_description: { type: Type.STRING },
+                  reward_multiplier: { type: Type.NUMBER },
+                  required_payload: { type: Type.STRING }
+                },
+                required: ["task_type", "location_description", "reward_multiplier"]
+              }
+            },
+            risk_assessment: { type: Type.STRING }
+          },
+          required: ["mission_name", "strategic_priority", "tasks", "risk_assessment"]
+        }
+      }
+    });
+
+    const plan = JSON.parse(response.text || "{}");
+    res.json({
+      status: "success",
+      source: "Gemini 3.8 Flash (Strategic Layer)",
+      plan
+    });
+  } catch (error: any) {
+    console.error("Gemini strategic planning error:", error);
+    res.status(500).json({ error: "Gemini mission decomposition failed", details: error.message });
+  }
+});
 
 // Serve static documents and figures
 app.use("/docs", express.static(path.join(process.cwd(), "docs")));

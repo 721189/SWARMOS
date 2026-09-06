@@ -90,7 +90,7 @@ def generate_rigorous_report(results_path="nebius_experiment_results.json"):
         report_lines.append(f"*   **Full SWARMOS Resilience**: The integrated stack (Anomaly Filter + Safety Compiler + Recovery) provides a total of **+{full_impact:.1f}%** resilience gain over Standard CBBA.")
         
         # Anomaly filtering specific check
-        adv_trials = [r for r in abl_data if r.get("failure_mode") == "adversarial"]
+        adv_trials = [r for r in abl_data if r.get("failure_mode") == "adversarial_nodes"]
         if adv_trials:
             sw_adv = [r["mission_completion"] for r in adv_trials if r["algorithm"] == "SWARMOS"]
             st_adv = [r["mission_completion"] for r in adv_trials if r["algorithm"] == "CBBA_Standard"]

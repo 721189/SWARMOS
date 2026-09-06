@@ -6,7 +6,7 @@ from swarmos.utils.logger import logger
 def run_ablation_study():
     configs = [
         {"fleet_size": 8, "task_count": 15, "scen": "nominal", "p_loss": 0.0},
-        {"fleet_size": 8, "task_count": 15, "scen": "adversarial", "p_loss": 0.1},
+        {"fleet_size": 8, "task_count": 15, "scen": "adversarial_nodes", "p_loss": 0.1},
         {"fleet_size": 8, "task_count": 20, "scen": "loss_50_catastrophic", "p_loss": 0.2}
     ]
     
