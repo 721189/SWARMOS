@@ -46,6 +46,9 @@ class SafetyCompiler:
             raise SafetyViolationError("Manifest Error: Missing 'max_range_meters' in constraints.")
             
         requested_range = float(constraints["max_range_meters"])
+        if not math.isfinite(requested_range) or requested_range < 0:
+             raise SafetyViolationError(f"Constraint violation: 'max_range_meters' must be a positive finite number (got {requested_range}).")
+
         if requested_range > self.max_range_meters:
             raise SafetyViolationError(
                 f"Constraint violation: requested max_range {requested_range}m exceeds hardware ceiling ({self.max_range_meters}m)."
@@ -60,6 +63,8 @@ class SafetyCompiler:
             raise SafetyViolationError(
                 f"Fleet safety violation: requested minimum active agents {requested_min_agents} is below redundancy floor ({self.min_agents})."
             )
+        if requested_min_agents <= 0:
+             raise SafetyViolationError(f"Fleet safety violation: 'minimum_active_agents' must be positive (got {requested_min_agents}).")
 
         # 3. Validate each task in manifest
         raw_tasks = raw_manifest.get("tasks")
@@ -78,7 +83,13 @@ class SafetyCompiler:
             if pos is None or not isinstance(pos, (list, tuple)) or len(pos) < 2:
                 raise SafetyViolationError(f"Task {task_id} Error: Missing or malformed 'position' coordinates.")
             
-            pos = [float(pos[0]), float(pos[1])]
+            try:
+                pos = [float(pos[0]), float(pos[1])]
+            except (ValueError, TypeError):
+                 raise SafetyViolationError(f"Task {task_id} Error: Coordinates must be numerical values.")
+
+            if not all(math.isfinite(c) for c in pos):
+                raise SafetyViolationError(f"Task {task_id} Error: Coordinates must be finite numbers (got {pos}).")
 
             # Spatial boundary check
             if not (0.0 <= pos[0] <= 1200.0 and 0.0 <= pos[1] <= 800.0):
@@ -96,6 +107,9 @@ class SafetyCompiler:
                 raise SafetyViolationError(f"Task {task_id} Error: Missing 'payload_kg'.")
                 
             payload = float(task["payload_kg"])
+            if not math.isfinite(payload) or payload < 0:
+                 raise SafetyViolationError(f"Task {task_id} Error: 'payload_kg' must be a positive finite number (got {payload}).")
+
             if payload > self.max_payload_kg:
                 raise SafetyViolationError(
                     f"Task {task_id} payload {payload}kg exceeds drone capacity limit ({self.max_payload_kg}kg)."
@@ -110,6 +124,13 @@ class SafetyCompiler:
             base_reward = float(task["base_reward"])
             duration = float(task["duration"])
             urgency_weight = float(task.get("urgency_weight", 1.0))
+
+            if not math.isfinite(base_reward) or base_reward < 0:
+                 raise SafetyViolationError(f"Task {task_id} Error: 'base_reward' must be a positive finite number (got {base_reward}).")
+            if not math.isfinite(duration) or duration <= 0:
+                 raise SafetyViolationError(f"Task {task_id} Error: 'duration' must be a strictly positive finite number (got {duration}).")
+            if not math.isfinite(urgency_weight) or urgency_weight <= 0:
+                 raise SafetyViolationError(f"Task {task_id} Error: 'urgency_weight' must be a strictly positive finite number (got {urgency_weight}).")
 
             validated_tasks.append({
                 "id": task_id,

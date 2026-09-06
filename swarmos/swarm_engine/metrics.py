@@ -114,6 +114,10 @@ class SwarmMetricsTracker:
         packets_drop = env.packets_dropped if env is not None and hasattr(env, "packets_dropped") else 0
         observed_drop_rate = (packets_drop / max(1, packets_gen)) * 100.0 if packets_gen > 0 else 0.0
 
+        # Network Invariants
+        # 1. conservation of flow: Delivered <= Generated
+        network_consistency = packets_deliv <= packets_gen
+        
         return {
             "completed_tasks": completed,
             "total_tasks": total_tasks,
@@ -130,4 +134,5 @@ class SwarmMetricsTracker:
             "packets_delivered": packets_deliv,
             "packets_dropped": packets_drop,
             "observed_packet_loss_pct": round(observed_drop_rate, 1),
+            "network_invariant_pass": network_consistency
         }

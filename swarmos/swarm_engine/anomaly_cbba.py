@@ -17,7 +17,7 @@ class StrategicAnomalyStatus:
 class StrategicAnomalyFilter:
     """
     Validates auction bids and agent kinematics before accepting consensus updates.
-    Guarantees convergence if N >= 3f + 1 where f is number of Byzantine nodes.
+    Provides heuristic anomaly detection and threshold-based isolation of deviant nodes.
     """
 
     def __init__(self, total_agents: int = 6, max_velocity_mps: float = 25.0):

@@ -66,6 +66,8 @@ def generate_deterministic_tasks(
 
     return tasks
 
+import hashlib
+
 def run_single_baseline_trial(
     fleet_size: int,
     task_count: int,
@@ -218,7 +220,18 @@ def run_single_baseline_trial(
         total_sim_time += dt
         env.step(dt)
 
-        # Mid-mission failure injection at t = 10.0s
+        # Integrate telemetry anomaly detection into simulation loop
+        if anomaly_filter is not None:
+            for agent in agents.values():
+                if agent.health.is_operational():
+                    valid, reason = anomaly_filter.validate_telemetry_kinematics(
+                        agent.id,
+                        agent.position[0],
+                        agent.position[1],
+                        total_sim_time
+                    )
+                    # If an agent is spoofing and detected, its health degrades or it is ignored
+                    # The consensus loop already filters by anomaly_filter status
         if not failure_injected and total_sim_time >= 10.0:
             failure_injected = True
             failed_agents = []
@@ -357,16 +370,20 @@ def run_single_baseline_trial(
     actual_completion_pct = (completed_count / max(1, len(tasks))) * 100.0
     mean_replan = (sum(replan_latencies) / len(replan_latencies)) if replan_latencies else 0.0
 
+    # Compute config hash
+    config_str = f"{fleet_size}-{task_count}-{algorithm}-{comm_range}-{packet_loss_rate}-{failure_mode}"
+    config_hash = hashlib.sha256(config_str.encode()).hexdigest()[:12]
+    
     return {
-        "experiment_id": f"EXP-{seed}-{algorithm}",
-        "config_hash": hash(f"{fleet_size}-{task_count}-{algorithm}-{seed}"),
+        "run_id": f"RUN-{seed}-{algorithm}-{int(time.time())}",
+        "config_hash": config_hash,
+        "seed": seed,
+        "algorithm": algorithm,
         "fleet_size": fleet_size,
         "task_count": task_count,
-        "algorithm": algorithm,
         "failure_mode": failure_mode,
         "communication_range": comm_range,
         "packet_loss": packet_loss_rate,
-        "seed": seed,
         "sim_time_sec": round(total_sim_time, 1),
         "mission_completion": round(actual_completion_pct, 1),
         "mean_convergence_ms": round(initial_consensus_ms, 2),

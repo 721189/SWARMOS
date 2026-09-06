@@ -159,14 +159,12 @@ class CBBAEngine:
         """
         changes_occurred = False
         
-        # Build neighbor map if links provided as a list
-        if isinstance(communication_links, list):
-            neighbors_map = {a_id: [] for a_id in agents.keys()}
-            for link in communication_links:
-                neighbors_map[link[0]].append(link[1])
-                neighbors_map[link[1]].append(link[0])
-        else:
-            neighbors_map = communication_links
+        # Build neighbor map from links
+        neighbors_map = {a_id: [] for a_id in agents.keys()}
+        # communication_links can be a list or set of tuples (id1, id2)
+        for link in communication_links:
+            neighbors_map[link[0]].append(link[1])
+            neighbors_map[link[1]].append(link[0])
             
         for i_id, agent_i in agents.items():
             if not agent_i.health.is_operational(): continue

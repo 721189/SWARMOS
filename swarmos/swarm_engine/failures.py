@@ -11,9 +11,12 @@ Simulates deterministic and stochastic field anomalies:
 import enum
 import random
 import time
+import logging
 from typing import Dict, List, Optional, Tuple, Any
 from .agents import Agent, AgentStatus
 from .environment import SwarmEnvironment, ThreatZone
+
+logger = logging.getLogger("SWARMOS")
 
 class FailureType(enum.Enum):
     MOTOR_FAILURE = "MOTOR_FAILURE"
@@ -137,23 +140,23 @@ class FailureInjector:
         if not operational_agents:
             return None
 
-        chosen_type = random.choice([
+        chosen_type = self.env.rng.choice([
             FailureType.MOTOR_FAILURE,
             FailureType.RF_JAMMING,
             FailureType.POPUP_THREAT
         ])
 
         if chosen_type == FailureType.MOTOR_FAILURE:
-            target = random.choice(operational_agents)
+            target = self.env.rng.choice(operational_agents)
             self.inject_motor_failure(target.id, "Stochastic mechanical failure")
             return self.history[-1]
         elif chosen_type == FailureType.RF_JAMMING:
-            target = random.choice(operational_agents)
+            target = self.env.rng.choice(operational_agents)
             self.inject_rf_jamming(tuple(target.position), radius=180.0)
             return self.history[-1]
         elif chosen_type == FailureType.POPUP_THREAT:
-            rx = random.uniform(200, self.env.width - 200)
-            ry = random.uniform(150, self.env.height - 150)
+            rx = self.env.rng.uniform(200, self.env.width - 200)
+            ry = self.env.rng.uniform(150, self.env.height - 150)
             self.inject_popup_threat((rx, ry))
             return self.history[-1]
 
