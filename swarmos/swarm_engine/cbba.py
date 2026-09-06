@@ -16,7 +16,7 @@ from typing import Dict, List, Tuple, Optional, Any, Set
 from enum import Enum
 from .agents import Agent, AgentStatus
 from .tasks import Task, TaskStatus
-from .anomaly_cbba import ByzantineAnomalyFilter, BftAgentStatus
+from .anomaly_cbba import StrategicAnomalyFilter, StrategicAnomalyStatus
 
 
 class AuctionTermination(Enum):
@@ -29,11 +29,11 @@ class CBBAEngine:
         self,
         lambda_decay: float = 0.95,
         bid_epsilon: float = 1e-4,
-        bft_validator: Optional[ByzantineAnomalyFilter] = None
+        anomaly_filter: Optional[StrategicAnomalyFilter] = None
     ):
         self.lambda_decay = lambda_decay
         self.bid_epsilon = bid_epsilon
-        self.bft_validator = bft_validator
+        self.anomaly_filter = anomaly_filter
         self.consensus_iterations = 0
         self.has_converged = False
         self.decision_logs: List[Dict[str, Any]] = []
@@ -115,7 +115,16 @@ class CBBAEngine:
 
                         # Check if marginal gain beats the current known highest bid for this task
                         current_winning_bid = agent.winning_bids.get(task_id, 0.0)
-                        if marginal_gain > (current_winning_bid + self.bid_epsilon):
+                        
+                        is_better = marginal_gain > (current_winning_bid + self.bid_epsilon)
+                        is_equal_but_tiebreak = False
+                        if not is_better and abs(marginal_gain - current_winning_bid) <= self.bid_epsilon:
+                            current_winner = agent.winning_agents.get(task_id)
+                            # Tie-break: if scores are equal, lower ID agent wins the bid contest
+                            if current_winner and agent.id < current_winner:
+                                is_equal_but_tiebreak = True
+                        
+                        if is_better or is_equal_but_tiebreak:
                             if marginal_gain > best_marginal_score:
                                 best_marginal_score = marginal_gain
                                 best_task_id = task_id
@@ -127,7 +136,10 @@ class CBBAEngine:
                     agent.path.insert(best_insertion_idx, best_task_id)
                     agent.winning_bids[best_task_id] = best_marginal_score
                     agent.winning_agents[best_task_id] = agent.id
-                    agent.timestamps[agent.id] = time.time()
+                    # Increment logical clock when making a new claim
+                    agent.logical_clock += 1
+                    agent.timestamps[agent.id] = agent.logical_clock
+                    changes_occurred = True
                 else:
                     break  # No further task provides positive marginal gain over existing bids
 
@@ -141,8 +153,13 @@ class CBBAEngine:
         communication_links: Any,
         env: Optional[Any] = None
     ) -> bool:
+        """
+        Phase 2: Conflict resolution using logical clocks.
+        Agents exchange winning_agents, winning_bids, and timestamp vectors.
+        """
         changes_occurred = False
-        current_time = time.time()
+        
+        # Build neighbor map if links provided as a list
         if isinstance(communication_links, list):
             neighbors_map = {a_id: [] for a_id in agents.keys()}
             for link in communication_links:
@@ -153,125 +170,137 @@ class CBBAEngine:
             
         for i_id, agent_i in agents.items():
             if not agent_i.health.is_operational(): continue
-            for k_id in set(neighbors_map.get(i_id, [])):
+            
+            for k_id in neighbors_map.get(i_id, []):
                 agent_k = agents[k_id]
                 if not agent_k.health.is_operational(): continue
-                if self.bft_validator is not None:
-                    k_status = self.bft_validator.agent_statuses.get(k_id, BftAgentStatus.TRUSTED)
-                    if k_status in (BftAgentStatus.QUARANTINED, BftAgentStatus.EJECTED): continue
-                if env is not None and hasattr(env, "transmit_packet"):
-                    delivered = env.transmit_packet(k_id, i_id, payload_bytes=128)
-                    if not delivered: continue
-                    
-                s_kk = agent_k.timestamps.get(k_id, current_time)
-                agent_i.timestamps[k_id] = max(agent_i.timestamps.get(k_id, 0.0), s_kk)
-                for m_id in agents.keys():
-                    if m_id not in (i_id, k_id):
-                        s_im = agent_i.timestamps.get(m_id, 0.0)
-                        s_km = agent_k.timestamps.get(m_id, 0.0)
-                        agent_i.timestamps[m_id] = max(s_im, s_km)
                 
+                # Anomaly Filtering Integration
+                if self.anomaly_filter is not None:
+                    k_status = self.anomaly_filter.agent_statuses.get(k_id, StrategicAnomalyStatus.TRUSTED)
+                    if k_status in (StrategicAnomalyStatus.QUARANTINED, StrategicAnomalyStatus.EJECTED):
+                        continue
+                
+                # Physical Communication Modeling
+                if env is not None and hasattr(env, "transmit_packet"):
+                    delivered = env.transmit_packet(k_id, i_id, payload_bytes=256)
+                    if not delivered: continue
+
+                # Process every task according to conflict resolution table
                 for task_id in tasks.keys():
                     y_i = agent_i.winning_bids.get(task_id, 0.0)
                     z_i = agent_i.winning_agents.get(task_id, None)
                     y_k = agent_k.winning_bids.get(task_id, 0.0)
                     z_k = agent_k.winning_agents.get(task_id, None)
-                    if self.bft_validator is not None and z_k is not None and y_k > 0:
+                    
+                    if self.anomaly_filter is not None and z_k is not None and y_k > 0:
                         task_obj = tasks.get(task_id)
                         base_r = task_obj.base_reward if task_obj else 100.0
-                        valid_bid, reason = self.bft_validator.validate_bid(z_k, task_id, y_k, base_r)
+                        valid_bid, reason = self.anomaly_filter.validate_bid(z_k, task_id, y_k, base_r)
                         if not valid_bid:
-                            self._record_decision(i_id, task_id, "REJECT_BFT", reason or "Poisoned BFT bid")
                             continue
                             
-
                     action = "LEAVE"
+                    # Implementation of Table 1 conflict resolution rules (Choi et al. 2009)
                     if z_k == k_id:
+                        # Rule 1, 2, 3: z_k = k_id
                         if z_i == i_id:
-                            if y_k > y_i: action = "UPDATE"
+                            if y_k > y_i + self.bid_epsilon: action = "UPDATE"
                             elif abs(y_k - y_i) <= self.bid_epsilon and k_id < i_id: action = "UPDATE"
                             else: action = "LEAVE"
-                        elif z_i == k_id:
-                            action = "UPDATE"
-                        elif z_i not in (i_id, k_id, None):
-                            m_id = z_i
-                            if agent_k.timestamps.get(m_id, 0.0) > agent_i.timestamps.get(m_id, 0.0):
-                                action = "UPDATE"
-                            elif y_k > y_i:
-                                action = "UPDATE"
-                            else:
-                                action = "LEAVE"
-                        else: # z_i is None
-                            action = "UPDATE"
+                        elif z_i == k_id: action = "LEAVE"
+                        elif z_i is not None:
+                            # Rule 3
+                            if agent_k.timestamps.get(k_id, 0) > agent_i.timestamps.get(k_id, 0):
+                                if y_k > y_i + self.bid_epsilon: action = "UPDATE"
+                                elif abs(y_k - y_i) <= self.bid_epsilon and k_id < z_i: action = "UPDATE"
+                                else: action = "RESET"
+                            else: action = "LEAVE"
+                        else: action = "UPDATE"
+
                     elif z_k == i_id:
+                        # Rule 4, 5, 6: z_k = i_id
                         if z_i == i_id: action = "LEAVE"
                         elif z_i == k_id: action = "RESET"
-                        elif z_i not in (i_id, k_id, None): action = "LEAVE"
+                        elif z_i is not None:
+                            if agent_k.timestamps.get(i_id, 0) > agent_i.timestamps.get(i_id, 0): action = "RESET"
+                            else: action = "LEAVE"
                         else: action = "LEAVE"
-                    elif z_k not in (i_id, k_id, None):
+
+                    elif z_k is not None:
+                        # Rule 7, 8, 9, 10, 11: z_k = m_id
                         m_id = z_k
                         if z_i == i_id:
-                            if agent_k.timestamps.get(m_id, 0.0) > agent_i.timestamps.get(m_id, 0.0): action = "UPDATE"
-                            elif y_k > y_i: action = "UPDATE"
-                            elif abs(y_k - y_i) <= self.bid_epsilon and m_id < i_id: action = "UPDATE"
+                            if agent_k.timestamps.get(m_id, 0) > agent_i.timestamps.get(m_id, 0):
+                                if y_k > y_i + self.bid_epsilon: action = "UPDATE"
+                                elif abs(y_k - y_i) <= self.bid_epsilon and m_id < i_id: action = "UPDATE"
+                                else: action = "LEAVE"
                             else: action = "LEAVE"
                         elif z_i == k_id:
-                            if agent_k.timestamps.get(m_id, 0.0) > agent_i.timestamps.get(m_id, 0.0): action = "UPDATE"
+                            if agent_k.timestamps.get(m_id, 0) > agent_i.timestamps.get(m_id, 0): action = "UPDATE"
                             else: action = "RESET"
                         elif z_i == m_id:
-                            if agent_k.timestamps.get(m_id, 0.0) > agent_i.timestamps.get(m_id, 0.0): action = "UPDATE"
+                            if agent_k.timestamps.get(m_id, 0) > agent_i.timestamps.get(m_id, 0): action = "UPDATE"
                             else: action = "LEAVE"
-                        elif z_i not in (i_id, k_id, m_id, None):
+                        elif z_i is not None:
+                            # Rule 11, 12, 14, 15: n_id = z_i
                             n_id = z_i
-                            t_k_m = agent_k.timestamps.get(m_id, 0.0)
-                            t_i_m = agent_i.timestamps.get(m_id, 0.0)
-                            t_k_n = agent_k.timestamps.get(n_id, 0.0)
-                            t_i_n = agent_i.timestamps.get(n_id, 0.0)
-                            
-                            if t_k_m > t_i_m and t_k_n > t_i_n: action = "UPDATE"
-                            elif t_k_m > t_i_m and t_k_n <= t_i_n:
-                                if y_k > y_i: action = "UPDATE"
-                                elif abs(y_k - y_i) <= self.bid_epsilon and m_id < n_id: action = "UPDATE"
+                            s_km = agent_k.timestamps.get(m_id, 0)
+                            s_im = agent_i.timestamps.get(m_id, 0)
+                            s_kn = agent_k.timestamps.get(n_id, 0)
+                            s_in = agent_i.timestamps.get(n_id, 0)
+                            if s_km > s_im:
+                                if s_kn > s_in: action = "UPDATE"
+                                else:
+                                    if y_k > y_i + self.bid_epsilon: action = "UPDATE"
+                                    elif abs(y_k - y_i) <= self.bid_epsilon and m_id < n_id: action = "UPDATE"
+                                    else: action = "RESET"
+                            else:
+                                if s_kn > s_in: action = "RESET"
                                 else: action = "LEAVE"
-                            elif t_k_m <= t_i_m and t_k_n > t_i_n: action = "UPDATE"
-                            elif t_k_m <= t_i_m and t_k_n <= t_i_n:
-                                if y_k > y_i: action = "UPDATE"
-                                else: action = "LEAVE"
-                        else: # z_i is None
-                            action = "UPDATE"
+                        else:
+                            if agent_k.timestamps.get(m_id, 0) > agent_i.timestamps.get(m_id, 0): action = "UPDATE"
+                            else: action = "LEAVE"
+
                     else: # z_k is None
+                        # Rule 13, 16, 17: z_k = None
                         if z_i == i_id: action = "LEAVE"
                         elif z_i == k_id: action = "UPDATE"
-                        elif z_i not in (i_id, k_id, None):
-                            m_id = z_i
-                            if agent_k.timestamps.get(m_id, 0.0) > agent_i.timestamps.get(m_id, 0.0): action = "UPDATE"
+                        elif z_i is not None:
+                            if agent_k.timestamps.get(z_i, 0) > agent_i.timestamps.get(z_i, 0): action = "UPDATE"
                             else: action = "LEAVE"
                         else: action = "LEAVE"
+
                     if action == "UPDATE":
                         if agent_i.winning_agents.get(task_id) != z_k or abs(agent_i.winning_bids.get(task_id, 0.0) - y_k) > self.bid_epsilon:
                             agent_i.winning_agents[task_id] = z_k
                             agent_i.winning_bids[task_id] = y_k
                             changes_occurred = True
-                            self._record_decision(i_id, task_id, "UPDATE", f"Adopted bid {y_k:.2f} from {z_k}")
                     elif action == "RESET":
                         if agent_i.winning_agents.get(task_id) is not None:
                             agent_i.winning_agents[task_id] = None
                             agent_i.winning_bids[task_id] = 0.0
                             changes_occurred = True
-                            self._record_decision(i_id, task_id, "RESET", "Reset bid")
-                            
-            dropped_idx = -1
+                
+                # Update agent_i's timestamps from agent_k AFTER task processing (Standard CBBA)
+                for m_id in agents.keys():
+                    s_km = agent_k.timestamps.get(m_id, 0)
+                    if m_id != i_id:
+                        agent_i.timestamps[m_id] = max(agent_i.timestamps.get(m_id, 0), s_km)
+
+            # Bundle Pruning
+            pruned_idx = -1
             for b_idx, tid in enumerate(agent_i.bundle):
-                if agent_i.winning_agents.get(tid) != agent_i.id:
-                    dropped_idx = b_idx
+                if agent_i.winning_agents.get(tid) != i_id:
+                    pruned_idx = b_idx
                     break
-            if dropped_idx != -1:
-                for drop_tid in agent_i.bundle[dropped_idx:]:
+            if pruned_idx != -1:
+                for drop_tid in agent_i.bundle[pruned_idx:]:
                     if drop_tid in agent_i.path: agent_i.path.remove(drop_tid)
-                    if agent_i.winning_agents.get(drop_tid) == agent_i.id:
+                    if agent_i.winning_agents.get(drop_tid) == i_id:
                         agent_i.winning_agents[drop_tid] = None
                         agent_i.winning_bids[drop_tid] = 0.0
-                agent_i.bundle = agent_i.bundle[:dropped_idx]
+                agent_i.bundle = agent_i.bundle[:pruned_idx]
                 changes_occurred = True
                 
         return changes_occurred
@@ -314,29 +343,34 @@ class CBBAEngine:
         communication_links: Any,
         max_iterations: int = 15,
         env: Optional[Any] = None
-    ) -> dict:
+    ) -> Dict[str, Any]:
         """
-        Runs full alternating Bundle Construction & Consensus Resolution iterations
-        until fleet convergence or max_iterations reached.
+        Runs full alternating Bundle Construction & Consensus Resolution.
         """
-        changed = False
+        self.consensus_iterations = 0
+        self.has_converged = False
+        
         for it in range(max_iterations):
             self.consensus_iterations += 1
+            # In Phase 1, agents increment their own logical clock if they make a new bid
             c1 = self.phase1_bundle_construction(agents, tasks)
+            # In Phase 2, agents update their timestamp vectors based on neighbors
             c2 = self.phase2_consensus_conflict_resolution(agents, tasks, communication_links, env=env)
+            
             changed = c1 or c2
             self.check_invariants(agents, tasks)
 
-            if not changed and it > 0:
+            if not changed:
                 self.has_converged = True
                 return {
-                    "status": AuctionTermination.CONVERGED,
+                    "termination_status": AuctionTermination.CONVERGED,
                     "iterations": it + 1,
-                    "changes_last_iteration": False
+                    "converged": True
                 }
+        
         self.has_converged = False
         return {
-            "status": AuctionTermination.MAX_ITERATIONS,
+            "termination_status": AuctionTermination.MAX_ITERATIONS,
             "iterations": max_iterations,
-            "changes_last_iteration": changed
+            "converged": False
         }

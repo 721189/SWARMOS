@@ -25,7 +25,7 @@ from swarmos.swarm_engine.agents import Agent, AgentStatus
 from swarmos.swarm_engine.tasks import Task, TaskType, TaskStatus
 from swarmos.swarm_engine.environment import SwarmEnvironment, Obstacle, ThreatZone
 from swarmos.swarm_engine.cbba import CBBAEngine
-from swarmos.swarm_engine.anomaly_cbba import ByzantineAnomalyFilter, BftAgentStatus
+from swarmos.swarm_engine.anomaly_cbba import StrategicAnomalyFilter, StrategicAnomalyStatus
 from swarmos.swarm_engine.failures import FailureInjector
 from swarmos.swarm_engine.metrics import SwarmMetricsTracker
 from swarmos.ai_layer.safety_compiler import SafetyCompiler
@@ -58,6 +58,7 @@ def generate_deterministic_tasks(
             base_reward=reward,
             duration=duration,
             urgency_weight=urgency,
+            payload_kg=round(rng.uniform(0.1, 2.0), 2),
             status=TaskStatus.UNASSIGNED,
             description=f"Empirical objective {t_id} ({t_type.value})"
         )
@@ -117,14 +118,14 @@ def run_single_baseline_trial(
         tasks[t.id] = t
 
     cbba_engine = None
-    bft_validator = None
+    anomaly_filter = None
     if algorithm in ("SWARMOS", "CBBA_BFT", "CBBA_Recovery_BFT"):
-        bft_validator = ByzantineAnomalyFilter(total_agents=fleet_size, max_velocity_mps=80.0)
+        anomaly_filter = StrategicAnomalyFilter(total_agents=fleet_size, max_velocity_mps=80.0)
         for aid in agents.keys():
-            bft_validator.register_agent(aid)
-        cbba = CBBAEngine(lambda_decay=0.95, bid_epsilon=1e-4, bft_validator=bft_validator)
+            anomaly_filter.register_agent(aid)
+        cbba = CBBAEngine(lambda_decay=0.95, bid_epsilon=1e-4, anomaly_filter=anomaly_filter)
     else:
-        cbba = CBBAEngine(lambda_decay=0.95, bid_epsilon=1e-4, bft_validator=None)
+        cbba = CBBAEngine(lambda_decay=0.95, bid_epsilon=1e-4, anomaly_filter=None)
 
     failure_injector = FailureInjector(env)
     metrics = SwarmMetricsTracker()
@@ -170,7 +171,14 @@ def run_single_baseline_trial(
             raw_manifest = {
                 "mission_name": "Empirical Matrix Sweep",
                 "tasks": [
-                    {"id": t.id, "type": t.task_type.value, "position": list(t.position), "base_reward": t.base_reward, "duration": t.duration}
+                    {
+                        "id": t.id, 
+                        "type": t.task_type.value, 
+                        "position": list(t.position), 
+                        "base_reward": t.base_reward, 
+                        "duration": t.duration,
+                        "payload_kg": getattr(t, "payload_kg", 0.0)
+                    }
                     for t in tasks.values()
                 ],
                 "constraints": {"max_range_meters": 1200.0, "minimum_active_agents": 2}
@@ -179,7 +187,10 @@ def run_single_baseline_trial(
 
         # Execute Distributed CBBA Auction
         comm_links = list(env.update_mesh_network())
-        cbba.run_auction_round(agents, tasks, comm_links, max_iterations=12, env=env)
+        res = cbba.run_auction_round(agents, tasks, comm_links, max_iterations=12, env=env)
+        # Use logical clock-based convergence check
+        if not res.get("converged", False):
+             logger.debug(f"Initial auction for {algorithm} did not reach convergence within iterations.")
 
     initial_consensus_ms = (time.perf_counter() - consensus_start) * 1000.0
 
@@ -347,12 +358,15 @@ def run_single_baseline_trial(
     mean_replan = (sum(replan_latencies) / len(replan_latencies)) if replan_latencies else 0.0
 
     return {
+        "experiment_id": f"EXP-{seed}-{algorithm}",
+        "config_hash": hash(f"{fleet_size}-{task_count}-{algorithm}-{seed}"),
         "fleet_size": fleet_size,
         "task_count": task_count,
         "algorithm": algorithm,
         "failure_mode": failure_mode,
         "communication_range": comm_range,
         "packet_loss": packet_loss_rate,
+        "seed": seed,
         "sim_time_sec": round(total_sim_time, 1),
         "mission_completion": round(actual_completion_pct, 1),
         "mean_convergence_ms": round(initial_consensus_ms, 2),

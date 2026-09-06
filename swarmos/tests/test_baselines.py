@@ -67,9 +67,11 @@ class TestBaselines(unittest.TestCase):
             env.add_task(Task(f"T{j+1}", TaskType.RECON, (200.0 + j*100, 400.0), base_reward=100.0, duration=4.0))
 
         comm_links = list(env.update_mesh_network())
-        cbba.run_auction_round(env.agents, env.tasks, comm_links, max_iterations=10, env=env)
+        comm_links = list(env.update_mesh_network())
+        res = cbba.run_auction_round(env.agents, env.tasks, comm_links, max_iterations=10, env=env)
 
         # Check unique assignment for all assigned tasks
+        self.assertTrue(res["converged"])
         claimed_tasks = set()
         for a in env.agents.values():
             for tid in a.bundle:

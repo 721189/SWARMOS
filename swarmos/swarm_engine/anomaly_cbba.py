@@ -8,13 +8,13 @@ from typing import Dict, List, Tuple, Optional
 import math
 import time
 
-class BftAgentStatus:
+class StrategicAnomalyStatus:
     TRUSTED = "TRUSTED"
     SUSPECT = "SUSPECT"
     QUARANTINED = "QUARANTINED"
     EJECTED = "EJECTED"
 
-class ByzantineAnomalyFilter:
+class StrategicAnomalyFilter:
     """
     Validates auction bids and agent kinematics before accepting consensus updates.
     Guarantees convergence if N >= 3f + 1 where f is number of Byzantine nodes.
@@ -23,31 +23,38 @@ class ByzantineAnomalyFilter:
     def __init__(self, total_agents: int = 6, max_velocity_mps: float = 25.0):
         self.total_agents = total_agents
         self.max_velocity_mps = max_velocity_mps
-        # Maximum tolerated Byzantine nodes: floor((N - 1) / 3)
-        self.max_tolerated_byzantine = (total_agents - 1) // 3
+        self.max_tolerated_anomalies = (total_agents - 1) // 3
         self.trust_scores: Dict[str, float] = {}
         self.agent_statuses: Dict[str, str] = {}
         self.violation_history: Dict[str, List[str]] = {}
-        self.last_reported_poses: Dict[str, Tuple[float, float, float]] = {} # (x, y, timestamp)
+        self.last_reported_poses: Dict[str, Tuple[float, float, float]] = {} 
+        self.detection_metrics = {
+            "total_detections": 0,
+            "poison_bids_blocked": 0,
+            "kinematic_spoofs_blocked": 0,
+            "false_positives_remediated": 0
+        }
 
     def register_agent(self, agent_id: str):
         self.trust_scores[agent_id] = 100.0
-        self.agent_statuses[agent_id] = BftAgentStatus.TRUSTED
+        self.agent_statuses[agent_id] = StrategicAnomalyStatus.TRUSTED
         self.violation_history[agent_id] = []
 
     def validate_bid(self, agent_id: str, task_id: str, bid_value: float, base_reward: float) -> Tuple[bool, Optional[str]]:
         """
         Detects Sybil / Bid-Poisoning attacks:
         Physical bound: In CBBA, a valid marginal bid b_i can never exceed
-        the theoretical maximum utility: base_reward * (1.0 + epsilon).
+        the theoretical maximum utility: base_reward * (1.25).
         """
-        status = self.agent_statuses.get(agent_id, BftAgentStatus.TRUSTED)
-        if status in (BftAgentStatus.QUARANTINED, BftAgentStatus.EJECTED):
+        status = self.agent_statuses.get(agent_id, StrategicAnomalyStatus.TRUSTED)
+        if status in (StrategicAnomalyStatus.QUARANTINED, StrategicAnomalyStatus.EJECTED):
             return False, f"Agent {agent_id} is {status}. Bids quarantined."
 
         max_allowed_bid = base_reward * 1.25
         if bid_value > max_allowed_bid:
             self._penalize_agent(agent_id, 35.0, f"Bid poisoning: {bid_value:.1f} > max bound {max_allowed_bid:.1f}")
+            self.detection_metrics["total_detections"] += 1
+            self.detection_metrics["poison_bids_blocked"] += 1
             return False, f"Rejected poisoned bid {bid_value:.1f} on {task_id} (max {max_allowed_bid:.1f})"
 
         return True, None
@@ -65,8 +72,8 @@ class ByzantineAnomalyFilter:
         1. Velocity check: ||p(t) - p(t-1)|| / delta_t <= v_max
         2. UWB trilateration residual check if peer distances available
         """
-        status = self.agent_statuses.get(agent_id, BftAgentStatus.TRUSTED)
-        if status in (BftAgentStatus.QUARANTINED, BftAgentStatus.EJECTED):
+        status = self.agent_statuses.get(agent_id, StrategicAnomalyStatus.TRUSTED)
+        if status in (StrategicAnomalyStatus.QUARANTINED, StrategicAnomalyStatus.EJECTED):
             return False, f"Agent {agent_id} is {status}."
 
         if agent_id in self.last_reported_poses:
@@ -78,6 +85,8 @@ class ByzantineAnomalyFilter:
             if speed > self.max_velocity_mps:
                 reason = f"Kinematic spoof: velocity {speed:.1f}m/s > physical limit {self.max_velocity_mps:.1f}m/s"
                 self._penalize_agent(agent_id, 45.0, reason)
+                self.detection_metrics["total_detections"] += 1
+                self.detection_metrics["kinematic_spoofs_blocked"] += 1
                 return False, reason
 
         self.last_reported_poses[agent_id] = (current_x, current_y, timestamp)
@@ -90,13 +99,14 @@ class ByzantineAnomalyFilter:
         self.violation_history.setdefault(agent_id, []).append(reason)
 
         if new_trust <= 35.0:
-            self.agent_statuses[agent_id] = BftAgentStatus.QUARANTINED
+            self.agent_statuses[agent_id] = StrategicAnomalyStatus.QUARANTINED
             print(f"[Anomaly Filter-CONSENSUS] ⚠ AGENT {agent_id} QUARANTINED! Trust={new_trust}%. Reason: {reason}")
         elif new_trust <= 65.0:
-            self.agent_statuses[agent_id] = BftAgentStatus.SUSPECT
+            self.agent_statuses[agent_id] = StrategicAnomalyStatus.SUSPECT
 
     def remediate_agent(self, agent_id: str):
-        """Scrub cryptographic certificates and restore agent to fleet."""
+        """Scrub certificates and restore agent to fleet."""
         self.trust_scores[agent_id] = 100.0
-        self.agent_statuses[agent_id] = BftAgentStatus.TRUSTED
+        self.agent_statuses[agent_id] = StrategicAnomalyStatus.TRUSTED
+        self.detection_metrics["false_positives_remediated"] += 1
         print(f"[Anomaly Filter-CONSENSUS] ✓ Agent {agent_id} remediated and restored to consensus pool.")

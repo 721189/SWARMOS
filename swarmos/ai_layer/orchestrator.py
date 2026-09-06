@@ -103,6 +103,7 @@ class SwarmOrchestrator:
             env=self.env
         )
         duration_ms = self.metrics.stop_consensus_timer()
+        converged = self.cbba.has_converged
         logger.info(f"Consensus reached: {converged} in {duration_ms:.2f}ms")
 
         # Assign targets to agents from their path sequence

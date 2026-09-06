@@ -25,7 +25,7 @@ class TestCBBADisconnected(unittest.TestCase):
         
         # Because they are disconnected, they both might claim T1 in their own isolated state
         # But wait, CBBAEngine will converge locally.
-        self.assertEqual(res["status"], AuctionTermination.CONVERGED)
+        self.assertEqual(res["termination_status"], AuctionTermination.CONVERGED)
         self.assertIn("T1", a1.bundle)
         self.assertIn("T1", a2.bundle)
 

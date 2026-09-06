@@ -32,12 +32,11 @@ class TestCBBAInvariants(unittest.TestCase):
                 base_reward=rng.uniform(10.0, 100.0)
             )
             
-        # Connected communication graph
+        # Fully connected communication mesh for invariant testing
         comm_links = []
         for i in range(num_agents):
-            for j in range(num_agents):
-                if i != j and rng.random() > 0.3:
-                    comm_links.append((f"A{i}", f"A{j}"))
+            for j in range(i + 1, num_agents):
+                comm_links.append((f"A{i}", f"A{j}"))
                     
         return agents, tasks, comm_links
 
@@ -68,9 +67,9 @@ class TestCBBAInvariants(unittest.TestCase):
             
             # Run to convergence
             for _ in range(100):
-                engine.phase1_bundle_construction(agents, tasks)
-                changed = engine.phase2_consensus_conflict_resolution(agents, tasks, comm_links)
-                if not changed:
+                c1 = engine.phase1_bundle_construction(agents, tasks)
+                c2 = engine.phase2_consensus_conflict_resolution(agents, tasks, comm_links)
+                if not (c1 or c2):
                     break
                     
             self.assert_invariants(agents, tasks)

@@ -32,6 +32,7 @@ class Task:
     urgency_weight: float = 1.0     # Temporal discount factor multiplier
     status: TaskStatus = TaskStatus.UNASSIGNED
     assigned_agent_id: Optional[str] = None
+    payload_kg: float = 0.0
     created_at: float = field(default_factory=time.time)
     completed_at: Optional[float] = None
     required_capabilities: Dict[str, float] = field(default_factory=lambda: {"optical": 0.5, "compute": 0.5})

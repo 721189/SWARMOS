@@ -30,7 +30,7 @@ class TestCBBADeterminism(unittest.TestCase):
             return {
                 "a1_bundle": list(env.agents["A1"].bundle),
                 "a2_bundle": list(env.agents["A2"].bundle),
-                "status": res["status"].value
+                "termination_status": res["termination_status"].value
             }
 
         res1 = run_sim(42)

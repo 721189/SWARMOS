@@ -22,6 +22,7 @@ class FailureType(enum.Enum):
     SENSOR_BLINDNESS = "SENSOR_BLINDNESS"
     BATTERY_DRAIN = "BATTERY_DRAIN"
     POPUP_THREAT = "POPUP_THREAT"
+    ADVERSARIAL_NODE = "ADVERSARIAL_NODE"
 
 class FailureInjector:
     def __init__(self, env: SwarmEnvironment):
@@ -105,6 +106,30 @@ class FailureInjector:
         }
         self.history.append(event)
         return threat_id
+
+    def inject_adversarial_node(self, agent_id: str, behavior: str = "poison"):
+        """
+        Injects malicious behavior into an agent.
+        'poison': Bids excessively high on tasks to deny others.
+        'spoof': Reports fake kinematic telemetry.
+        """
+        agent = self.env.agents.get(agent_id)
+        if agent:
+            # We add metadata to the agent for the simulation loop to pick up
+            if not hasattr(agent, "adversarial_config"):
+                agent.adversarial_config = {}
+            agent.adversarial_config["behavior"] = behavior
+            
+            event = {
+                "timestamp": round(time.time(), 2),
+                "type": FailureType.ADVERSARIAL_NODE.value,
+                "target": agent_id,
+                "behavior": behavior
+            }
+            self.history.append(event)
+            logger.warning(f"Adversarial behavior '{behavior}' injected into {agent_id}")
+            return True
+        return False
 
     def inject_random_anomaly(self) -> Optional[Dict[str, Any]]:
         """Randomly selects an operational agent or map zone to stress test consensus."""

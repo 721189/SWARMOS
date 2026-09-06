@@ -1,5 +1,5 @@
 import unittest
-from swarmos.swarm_engine.anomaly_cbba import ByzantineAnomalyFilter, BftAgentStatus
+from swarmos.swarm_engine.anomaly_cbba import StrategicAnomalyFilter, StrategicAnomalyStatus
 from swarmos.swarm_engine.cbba import CBBAEngine
 from swarmos.swarm_engine.agents import Agent
 from swarmos.swarm_engine.tasks import Task, TaskType
@@ -7,7 +7,7 @@ from swarmos.swarm_engine.environment import SwarmEnvironment
 
 class TestBftConsensus(unittest.TestCase):
     def setUp(self):
-        self.validator = ByzantineAnomalyFilter(total_agents=4, max_velocity_mps=60.0)
+        self.validator = StrategicAnomalyFilter(total_agents=4, max_velocity_mps=60.0)
         for aid in ["A1", "A2", "A3", "A4"]:
             self.validator.register_agent(aid)
 
@@ -39,10 +39,10 @@ class TestBftConsensus(unittest.TestCase):
     def test_quarantine_threshold_and_remediation(self):
         # Penalize repeatedly until quarantined
         self.validator._penalize_agent("A3", 40.0, "Violation 1")
-        self.assertEqual(self.validator.agent_statuses["A3"], BftAgentStatus.SUSPECT)
+        self.assertEqual(self.validator.agent_statuses["A3"], StrategicAnomalyStatus.SUSPECT)
         
         self.validator._penalize_agent("A3", 35.0, "Violation 2")
-        self.assertEqual(self.validator.agent_statuses["A3"], BftAgentStatus.QUARANTINED)
+        self.assertEqual(self.validator.agent_statuses["A3"], StrategicAnomalyStatus.QUARANTINED)
 
         # Quarantined agent bids are automatically rejected
         valid, _ = self.validator.validate_bid("A3", "T1", 50.0, 100.0)
@@ -50,12 +50,12 @@ class TestBftConsensus(unittest.TestCase):
 
         # Remediate
         self.validator.remediate_agent("A3")
-        self.assertEqual(self.validator.agent_statuses["A3"], BftAgentStatus.TRUSTED)
+        self.assertEqual(self.validator.agent_statuses["A3"], StrategicAnomalyStatus.TRUSTED)
         valid_after, _ = self.validator.validate_bid("A3", "T1", 50.0, 100.0)
         self.assertTrue(valid_after)
 
     def test_cbba_with_bft_integration_blocks_poisoned_bids(self):
-        cbba = CBBAEngine(lambda_decay=0.95, bid_epsilon=1e-4, bft_validator=self.validator)
+        cbba = CBBAEngine(lambda_decay=0.95, bid_epsilon=1e-4, anomaly_filter=self.validator)
         env = SwarmEnvironment(width=1000, height=800, comm_range=400.0)
         
         a1 = Agent("A1", (100.0, 500.0), speed=50.0)

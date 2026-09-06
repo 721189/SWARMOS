@@ -10,6 +10,10 @@ import math
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Tuple
 
+class SafetyViolationError(Exception):
+    """Raised when a mission manifest violates critical physical or operational constraints."""
+    pass
+
 class SafetyCompiler:
     def __init__(
         self,
@@ -26,84 +30,86 @@ class SafetyCompiler:
     def compile_and_validate(self, raw_manifest: Dict[str, Any]) -> Dict[str, Any]:
         """
         Deterministically compiles and validates mission tasks against hard physical constraints.
-        Canonicalizes task schemas to standard coordinate formats.
+        Fail-closed: Raises SafetyViolationError if critical constraints are breached.
         """
         violations: List[str] = []
         validated_tasks: List[Dict[str, Any]] = []
 
-        constraints = raw_manifest.get("constraints", {})
+        constraints = raw_manifest.get("constraints")
+        if constraints is None:
+            raise SafetyViolationError("Manifest Error: Missing 'constraints' block.")
         if not isinstance(constraints, dict):
-            constraints = {}
+            raise SafetyViolationError("Manifest Error: 'constraints' must be a dictionary.")
 
         # 1. Enforce max range constraint ceiling
-        requested_range = float(constraints.get("max_range_meters", self.max_range_meters))
+        if "max_range_meters" not in constraints:
+            raise SafetyViolationError("Manifest Error: Missing 'max_range_meters' in constraints.")
+            
+        requested_range = float(constraints["max_range_meters"])
         if requested_range > self.max_range_meters:
-            violations.append(
-                f"Constraint violation: max_range {requested_range}m exceeds hardware ceiling ({self.max_range_meters}m). Clamped."
+            raise SafetyViolationError(
+                f"Constraint violation: requested max_range {requested_range}m exceeds hardware ceiling ({self.max_range_meters}m)."
             )
-            constraints["max_range_meters"] = self.max_range_meters
-        else:
-            constraints["max_range_meters"] = requested_range
 
         # 2. Enforce minimum fleet redundancy
-        requested_min_agents = int(constraints.get("minimum_active_agents", self.min_agents))
+        if "minimum_active_agents" not in constraints:
+            raise SafetyViolationError("Manifest Error: Missing 'minimum_active_agents' in constraints.")
+            
+        requested_min_agents = int(constraints["minimum_active_agents"])
         if requested_min_agents < self.min_agents:
-            violations.append(
-                f"Fleet safety clamp: minimum active agents increased to redundancy floor ({self.min_agents})."
+            raise SafetyViolationError(
+                f"Fleet safety violation: requested minimum active agents {requested_min_agents} is below redundancy floor ({self.min_agents})."
             )
-            constraints["minimum_active_agents"] = self.min_agents
-        else:
-            constraints["minimum_active_agents"] = requested_min_agents
 
         # 3. Validate each task in manifest
-        raw_tasks = raw_manifest.get("tasks", [])
+        raw_tasks = raw_manifest.get("tasks")
         if not isinstance(raw_tasks, list) or len(raw_tasks) == 0:
-            violations.append("Manifest error: No tasks supplied in mission directive.")
+            raise SafetyViolationError("Manifest error: No tasks supplied in mission directive.")
 
         for idx, task in enumerate(raw_tasks):
-            task_id = str(task.get("id", f"T{idx+1}"))
+            if "id" not in task:
+                raise SafetyViolationError(f"Task Error: Task at index {idx} is missing 'id'.")
+            
+            task_id = str(task["id"])
             task_type = str(task.get("type", "RECON")).upper()
 
-            # Canonicalize position from either [x, y] or {x, y}
+            # Strict position validation
             pos = task.get("position")
-            if pos is None:
-                wp = task.get("waypoint", {})
-                if isinstance(wp, dict):
-                    pos = [float(wp.get("x", 400.0)), float(wp.get("y", 300.0))]
-                elif isinstance(wp, (list, tuple)) and len(wp) >= 2:
-                    pos = [float(wp[0]), float(wp[1])]
-                else:
-                    pos = [400.0, 300.0]
-            elif isinstance(pos, (list, tuple)) and len(pos) >= 2:
-                pos = [float(pos[0]), float(pos[1])]
-            else:
-                pos = [400.0, 300.0]
+            if pos is None or not isinstance(pos, (list, tuple)) or len(pos) < 2:
+                raise SafetyViolationError(f"Task {task_id} Error: Missing or malformed 'position' coordinates.")
+            
+            pos = [float(pos[0]), float(pos[1])]
 
             # Spatial boundary check
             if not (0.0 <= pos[0] <= 1200.0 and 0.0 <= pos[1] <= 800.0):
-                violations.append(f"Task {task_id} position {pos} is out of operational theater bounds ([0,1200], [0,800]). Rejected.")
-                continue
+                raise SafetyViolationError(f"Task {task_id} position {pos} is out of operational theater bounds ([0,1200], [0,800]).")
 
             # Operating radius from base deployment origin check
             dist_origin = math.hypot(pos[0] - self.base_origin[0], pos[1] - self.base_origin[1])
             if dist_origin > self.max_range_meters:
-                violations.append(
-                    f"Task {task_id} at {pos} exceeds max operational radius ({dist_origin:.1f}m > {self.max_range_meters}m). Rejected."
+                raise SafetyViolationError(
+                    f"Task {task_id} at {pos} exceeds max operational radius ({dist_origin:.1f}m > {self.max_range_meters}m)."
                 )
-                continue
 
             # Payload weight check
-            payload = float(task.get("payload_kg", 0.0))
+            if "payload_kg" not in task:
+                raise SafetyViolationError(f"Task {task_id} Error: Missing 'payload_kg'.")
+                
+            payload = float(task["payload_kg"])
             if payload > self.max_payload_kg:
-                violations.append(
-                    f"Task {task_id} payload {payload}kg exceeds drone capacity limit ({self.max_payload_kg}kg). Rejected."
+                raise SafetyViolationError(
+                    f"Task {task_id} payload {payload}kg exceeds drone capacity limit ({self.max_payload_kg}kg)."
                 )
-                continue
 
             # Duration & Reward checks
-            base_reward = max(10.0, float(task.get("base_reward", task.get("reward", 100.0))))
-            duration = max(1.0, float(task.get("duration", 5.0)))
-            urgency_weight = max(0.1, float(task.get("urgency_weight", task.get("priority", 1.0))))
+            if "base_reward" not in task:
+                raise SafetyViolationError(f"Task {task_id} Error: Missing 'base_reward'.")
+            if "duration" not in task:
+                raise SafetyViolationError(f"Task {task_id} Error: Missing 'duration'.")
+                
+            base_reward = float(task["base_reward"])
+            duration = float(task["duration"])
+            urgency_weight = float(task.get("urgency_weight", 1.0))
 
             validated_tasks.append({
                 "id": task_id,
@@ -116,16 +122,11 @@ class SafetyCompiler:
                 "description": str(task.get("description", f"Operational objective {task_id}"))
             })
 
-        is_approved = len(validated_tasks) > 0
-        verdict = "APPROVED" if is_approved else "REJECTED"
-
         return {
-            "mission_name": raw_manifest.get("mission_name", raw_manifest.get("objective", "Tactical Swarm Mission")),
-            "tactical_intent": raw_manifest.get("tactical_intent", "Autonomous coordinated multi-agent mission"),
-            "recommended_agents": int(raw_manifest.get("recommended_agents", max(constraints.get("minimum_active_agents", 2), len(validated_tasks)))),
+            "mission_name": str(raw_manifest.get("mission_name", "Tactical Swarm Mission")),
+            "tactical_intent": str(raw_manifest.get("tactical_intent", "Autonomous coordinated mission")),
             "tasks": validated_tasks,
-            "constraints": constraints,
-            "safety_verdict": verdict,
-            "violations_logged": violations,
-            "compiler_timestamp": datetime.now(timezone.utc).isoformat()
+            "constraints": dict(constraints),
+            "safety_verdict": "APPROVED",
+            "compiled_at_logical": 0 # Deterministic place holder, remove wall-clock
         }

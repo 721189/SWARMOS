@@ -58,8 +58,9 @@ class Agent:
         self.winning_bids: Dict[str, float] = {}
         # winning agents vector z_i: task_id -> agent_id who holds winning bid
         self.winning_agents: Dict[str, Optional[str]] = {}
-        # timestamp vector s_i: agent_k -> last time agent_i received info from agent_k
-        self.timestamps: Dict[str, float] = {}
+        # timestamp vector s_i: agent_k -> last known logical clock from agent_k
+        self.timestamps: Dict[str, int] = {}
+        self.logical_clock: int = 0
         
         # Telemetry & execution
         self.current_task_id: Optional[str] = None
@@ -115,7 +116,7 @@ class Agent:
         self.messages_sent += 1
         return {
             "sender_id": self.id,
-            "timestamp": time.time(),
+            "logical_clock": self.logical_clock,
             "winning_bids": dict(self.winning_bids),
             "winning_agents": dict(self.winning_agents),
             "timestamps": dict(self.timestamps),
@@ -128,7 +129,8 @@ class Agent:
         """Record received packet and increment diagnostic counter."""
         self.messages_received += 1
         sender_id = packet["sender_id"]
-        self.timestamps[sender_id] = packet["timestamp"]
+        # Update local view of sender's logical clock
+        self.timestamps[sender_id] = max(self.timestamps.get(sender_id, 0), packet.get("logical_clock", 0))
 
     def to_dict(self) -> Dict[str, Any]:
         return {
