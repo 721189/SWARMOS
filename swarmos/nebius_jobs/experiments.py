@@ -118,7 +118,7 @@ def run_single_baseline_trial(
 
     cbba_engine = None
     bft_validator = None
-    if algorithm == "SWARMOS":
+    if algorithm in ("SWARMOS", "CBBA_BFT", "CBBA_Recovery_BFT"):
         bft_validator = ByzantineAnomalyFilter(total_agents=fleet_size, max_velocity_mps=80.0)
         for aid in agents.keys():
             bft_validator.register_agent(aid)
@@ -163,7 +163,7 @@ def run_single_baseline_trial(
                 t.assigned_agent_id = agent.id
                 t.status = TaskStatus.ASSIGNED
 
-    elif algorithm in ("CBBA_Standard", "CBBA_Recovery", "SWARMOS"):
+    elif algorithm in ("CBBA_Standard", "CBBA_Recovery", "SWARMOS", "CBBA_BFT", "CBBA_Recovery_BFT"):
         # Deterministic Safety Verification for SWARMOS
         if algorithm == "SWARMOS":
             compiler = SafetyCompiler()
@@ -220,13 +220,24 @@ def run_single_baseline_trial(
                     failure_injector.inject_motor_failure("A2", "Kinetic fragment damage")
                     failed_agents.append("A2")
                 failure_injector.inject_rf_jamming((550.0, 400.0), radius=220.0)
-            elif failure_mode == "catastrophic_stress":
-                num_to_fail = max(1, int(fleet_size * 0.4))
+            elif failure_mode == "loss_50_catastrophic":
+                num_to_fail = max(1, int(fleet_size * 0.2))
                 for i in range(num_to_fail):
                     fa_id = f"A{i+1}"
                     failure_injector.inject_motor_failure(fa_id, "Catastrophic loss")
                     failed_agents.append(fa_id)
                 failure_injector.inject_rf_jamming((600.0, 350.0), radius=260.0)
+            elif failure_mode == "adversarial_nodes":
+                if fleet_size > 1:
+                    adv_id = "A1"
+                    if adv_id in agents and len(tasks) > 0:
+                        t_id = list(tasks.keys())[0]
+                        agents[adv_id].winning_bids[t_id] = 9999.0
+                        agents[adv_id].winning_agents[t_id] = adv_id
+                        agents[adv_id].bundle = [t_id]
+                        agents[adv_id].path = [t_id]
+                        # This node will try to poison the network if CBBA_BFT is not used
+            
 
             # Re-allocation / Recovery Response
             if failed_agents:
@@ -252,7 +263,7 @@ def run_single_baseline_trial(
                                     ot.assigned_agent_id = None
 
                 # 3. CBBA_Recovery & SWARMOS: Full dynamic re-auction across surviving operational nodes
-                elif algorithm in ("CBBA_Recovery", "SWARMOS"):
+                elif algorithm in ("CBBA_Recovery", "SWARMOS", "CBBA_Recovery_BFT"):
                     replan_t0 = time.perf_counter()
                     orphaned_tids = []
                     for fa_id in failed_agents:
@@ -376,7 +387,7 @@ def run_experiment_matrix(
     all_scenarios = spec.get("parameter_sweep", {}).get("failure_scenarios", [{"name": "nominal", "packet_loss_rate": 0.0}])
     all_comm_ranges = spec.get("parameter_sweep", {}).get("communication_ranges_m", [250.0, 350.0, 500.0])
     configured_trials = spec.get("trials_per_config", 3)
-    algorithms = ["Static", "Greedy", "CBBA_Standard", "CBBA_Recovery", "SWARMOS"]
+    algorithms = ["Static", "Greedy", "CBBA_Standard", "CBBA_Recovery", "CBBA_BFT", "CBBA_Recovery_BFT", "SWARMOS"]
 
     if reduced_benchmark:
         benchmark_mode = "reduced_benchmark"
