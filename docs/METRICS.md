@@ -50,10 +50,10 @@ This document formalizes the canonical metrics used to evaluate SWARMOS against 
 *   **Mean Latency**
     *   *Definition*: The average propagation delay for consensus packets.
 
-## 5. Security & Anomaly Detection
+## 5. Security & Strategic Anomaly Detection
 
 *   **Detection Rate (True Positive Rate)**
-    *   *Definition*: The percentage of malicious/anomalous bids successfully flagged and rejected by the Byzantine-aware anomaly filter.
+    *   *Definition*: The percentage of malicious/anomalous bids successfully flagged and rejected by the Strategic-Grade Anomaly-Aware Filter.
 *   **False Positive Rate (FPR)**
     *   *Definition*: The percentage of legitimate, honest bids incorrectly flagged as anomalous due to aggressive kinematic bounds checking or stale state.
 *   **Quarantine Latency**

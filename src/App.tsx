@@ -35,7 +35,7 @@ import { NebiusMatrixViewer } from './components/NebiusMatrixViewer';
 import { TechnicalReportViewer } from './components/TechnicalReportViewer';
 import { ExplainModal } from './components/ExplainModal';
 import { AtakCotGateway } from './components/AtakCotGateway';
-import { ByzantineDefensePanel } from './components/ByzantineDefensePanel';
+import { AnomalyDefensePanel } from './components/AnomalyDefensePanel';
 import { HeterogeneousFleetPanel } from './components/HeterogeneousFleetPanel';
 import { SdrMeshPanel } from './components/SdrMeshPanel';
 import { CbbaDebuggerPanel } from './components/CbbaDebuggerPanel';
@@ -51,7 +51,7 @@ type NavTab =
   | 'mumt'
   | 'sdrmesh'
   | 'atak' 
-  | 'byzantine' 
+  | 'anomaly' 
   | 'scaffold' 
   | 'architecture' 
   | 'storyboard' 
@@ -135,36 +135,36 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#070b14] text-slate-100 flex flex-col selection:bg-sky-500/30 selection:text-sky-200">
+    <div className="min-h-screen bg-[#0a0c12] text-slate-200 flex flex-col selection:bg-sky-500/20 selection:text-sky-100">
       {/* Top Tactical Command Header */}
-      <header className="sticky top-0 z-40 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md px-4 lg:px-6 py-2.5">
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <header className="sticky top-0 z-40 border-b border-slate-800/60 bg-[#0a0c12]/90 backdrop-blur-xl px-4 lg:px-6 py-3">
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
           {/* Brand & Project Identity */}
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-gradient-to-br from-sky-500/20 to-emerald-500/20 border border-sky-500/30 shadow-inner">
-              <Radio className="w-5 h-5 text-sky-400 animate-pulse" />
+          <div className="flex items-center gap-4">
+            <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 shadow-sm">
+              <Radio className="w-5 h-5 text-sky-400" />
             </div>
             <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-base font-bold text-white tracking-wide">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h1 className="text-lg font-extrabold text-white tracking-tight font-display">
                   SWARMOS
                 </h1>
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-sky-500/10 text-sky-400 border border-sky-500/20 font-semibold">
-                  CBBA v2.4 • MIL-STD-2525D
-                </span>
-                <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  <Sparkles className="w-3 h-3" />
-                  NVIDIA NEMOTRON-4-340B
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-mono bg-sky-500/5 text-sky-400 border border-sky-400/20 font-bold uppercase tracking-wider">
+                    CBBA v2.4
+                  </span>
+                  <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono bg-emerald-500/5 text-emerald-400 border border-emerald-400/20 font-bold uppercase tracking-wider">
+                    NVIDIA NEMOTRON
+                  </span>
+                </div>
                 {byzantineState.isGpsDenied && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse">
-                    <Satellite className="w-3 h-3" />
-                    GPS-DENIED (CRL MESH)
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono bg-amber-500/10 text-amber-400 border border-amber-400/20 font-bold uppercase tracking-wider">
+                    GPS-DENIED
                   </span>
                 )}
               </div>
-              <p className="text-[11px] text-slate-400 hidden sm:block">
-                Strategic-Grade Autonomous Swarm OS • MUM-T Multi-Domain Fleet &amp; anomaly-aware SDR MANET
+              <p className="text-xs text-slate-500 mt-0.5 font-medium">
+                Strategic Autonomous Swarm Framework • Strategic-Grade Anomaly Detection
               </p>
             </div>
           </div>
@@ -264,9 +264,9 @@ export default function App() {
 
             <button
               id="nav-tab-byzantine"
-              onClick={() => setActiveTab('byzantine')}
+              onClick={() => setActiveTab('anomaly')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all whitespace-nowrap ${
-                activeTab === 'byzantine'
+                activeTab === 'anomaly'
                   ? 'bg-sky-500 text-slate-950 font-bold shadow-sm'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
               }`}
@@ -553,10 +553,10 @@ export default function App() {
           </div>
         )}
 
-        {/* Tab 5: GPS-Denied & Byzantine Anomaly Defense */}
-        {activeTab === 'byzantine' && (
+        {/* Tab 5: GPS-Denied & Strategic Anomaly Defense */}
+        {activeTab === 'anomaly' && (
           <div className="animate-in fade-in duration-150">
-            <ByzantineDefensePanel
+            <AnomalyDefensePanel
               byzantineState={byzantineState}
               agents={agents}
               onToggleGpsDenied={toggleGpsDenied}
@@ -665,20 +665,20 @@ export default function App() {
       )}
 
       {/* Footer */}
-      <footer className="border-t border-slate-800/60 bg-slate-950 px-6 py-4 text-xs font-mono text-slate-500 mt-auto">
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>SWARMOS Strategic Autonomous Swarm Intelligence • CBBA-Byzantine Anomaly Filter</span>
+      <footer className="border-t border-slate-800/40 bg-[#0a0c12] px-6 py-6 text-[10px] font-mono text-slate-500 mt-auto">
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-6">
+          <div className="flex items-center gap-3">
+            <ShieldCheck className="w-4 h-4 text-emerald-500/60" />
+            <span className="uppercase tracking-widest font-semibold">SWARMOS Strategic Autonomous Swarm intelligence</span>
           </div>
-          <div className="flex items-center gap-4 text-slate-400">
-            <span>MUM-T Air+Ground+Surface</span>
-            <span>•</span>
-            <span>anomaly-aware SDR MANET</span>
-            <span>•</span>
-            <span>Jetson Orin Native TensorRT-LLM</span>
-            <span>•</span>
-            <span>ATAK CoT</span>
+          <div className="flex items-center gap-5 text-slate-600 font-medium">
+            <span>MUM-T AIR+GROUND+SURFACE</span>
+            <span className="text-slate-800">|</span>
+            <span>STRATEGIC ANOMALY FILTER</span>
+            <span className="text-slate-800">|</span>
+            <span>JETSON ORIN NATIVE TENSORRT-LLM</span>
+            <span className="text-slate-800">|</span>
+            <span>ATAK COT GATEWAY</span>
           </div>
         </div>
       </footer>

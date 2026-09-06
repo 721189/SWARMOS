@@ -24,7 +24,7 @@ interface ByzantineDefensePanelProps {
   onRemediate: (agentId: string) => void;
 }
 
-export const ByzantineDefensePanel: React.FC<ByzantineDefensePanelProps> = ({
+export const AnomalyDefensePanel: React.FC<ByzantineDefensePanelProps> = ({
   byzantineState,
   agents,
   onToggleGpsDenied,
@@ -46,39 +46,36 @@ export const ByzantineDefensePanel: React.FC<ByzantineDefensePanelProps> = ({
   const isQuorumHealthy = honestQuorumPct >= byzantineState.anomalyThresholdPct;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header Banner */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="p-1.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20">
-                <ShieldAlert className="w-5 h-5" />
-              </span>
-              <h2 className="text-xl font-bold tracking-tight text-slate-100">
-                GPS-Denied CRL &amp; Consensus Sanity &amp; Node Isolation Validator
+      <div className="bg-slate-900/50 border border-slate-800/60 rounded-2xl p-6 shadow-sm">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-red-500/5 text-red-400 border border-red-400/20 shadow-inner">
+                <ShieldAlert className="w-6 h-6" />
+              </div>
+              <h2 className="text-2xl font-extrabold tracking-tight text-white font-display">
+                Strategic-Grade Anomaly Detection &amp; Node Isolation
               </h2>
-              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                Dynamic Trust &amp; Quarantine Pool
-              </span>
             </div>
-            <p className="text-sm text-slate-400 max-w-3xl">
-              Electronic warfare defense and fault mitigation. When GNSS is jammed or adversary drones inject anomalous bids and spoofed telemetry, SWARMOS maintains Cooperative Relative Localization (CRL) and automatically isolates anomalous nodes from the consensus pool.
+            <p className="text-sm text-slate-500 max-w-4xl font-medium leading-relaxed">
+              Autonomous Electronic Warfare (EW) defense and fault mitigation. When GNSS is jammed or adversarial actors inject anomalous bids and spoofed telemetry, SWARMOS utilizes kinematic bounds-checking to isolate compromised nodes from the global consensus pool.
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <button
               id="toggle-gps-denied-btn"
               onClick={onToggleGpsDenied}
-              className={`px-4 py-2 rounded-lg font-medium text-xs flex items-center gap-2 shadow-md transition-all ${
+              className={`px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2.5 shadow-lg transition-all uppercase tracking-wider ${
                 byzantineState.isGpsDenied
-                  ? 'bg-amber-600 hover:bg-amber-500 text-white animate-pulse'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
+                  ? 'bg-amber-500 text-slate-950'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
               }`}
             >
               <Satellite className="w-4 h-4" />
-              {byzantineState.isGpsDenied ? 'GPS Constellation Denied (UWB Active)' : 'Simulate GPS Jamming Attack'}
+              {byzantineState.isGpsDenied ? 'GNSS DENIED' : 'Simulate GPS Jamming'}
             </button>
           </div>
         </div>
@@ -100,18 +97,18 @@ export const ByzantineDefensePanel: React.FC<ByzantineDefensePanelProps> = ({
           <Radio className={`w-8 h-8 ${byzantineState.isGpsDenied ? 'text-amber-500/30' : 'text-emerald-500/30'}`} />
         </div>
 
-        {/* Byzantine Anomaly Filter */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
+        {/* Strategic Anomaly Filter */}
+        <div className="bg-slate-900/40 border border-slate-800/60 rounded-2xl p-5 flex items-center justify-between shadow-sm">
           <div>
-            <div className="text-xs font-mono text-slate-400 uppercase tracking-wider">Anomaly Filter Health</div>
-            <div className={`text-lg font-bold font-mono mt-1 ${isQuorumHealthy ? 'text-emerald-400' : 'text-red-400'}`}>
+            <div className="text-[10px] font-bold font-mono text-slate-500 uppercase tracking-[0.2em]">Filter Integrity</div>
+            <div className={`text-xl font-extrabold font-display mt-2 ${isQuorumHealthy ? 'text-emerald-400' : 'text-red-400'}`}>
               {honestQuorumPct.toFixed(1)}% Honest
             </div>
-            <div className="text-[11px] font-mono text-slate-500 mt-0.5">
-              Threshold: &gt; {byzantineState.anomalyThresholdPct.toFixed(1)}% (2f+1)
+            <div className="text-[10px] font-mono text-slate-600 mt-1 font-bold uppercase tracking-wider">
+              Consensus Threshold: {byzantineState.anomalyThresholdPct.toFixed(1)}%
             </div>
           </div>
-          <ShieldCheck className="w-8 h-8 text-indigo-500/30" />
+          <ShieldCheck className="w-8 h-8 text-emerald-500/20" />
         </div>
 
         {/* Blocked Poison Bids */}
@@ -126,16 +123,16 @@ export const ByzantineDefensePanel: React.FC<ByzantineDefensePanelProps> = ({
           <AlertTriangle className="w-8 h-8 text-amber-500/30" />
         </div>
 
-        {/* Spoofed Vectors Mitigated */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
+        {/* Spoof Interception Matrix */}
+        <div className="bg-slate-900/40 border border-slate-800/60 rounded-2xl p-5 flex items-center justify-between shadow-sm">
           <div>
-            <div className="text-xs font-mono text-slate-400 uppercase tracking-wider">Spoofs Neutralized</div>
-            <div className="text-lg font-bold font-mono text-sky-400 mt-1">
-              {byzantineState.spoofedVectorsMitigated} Outliers
+            <div className="text-[10px] font-bold font-mono text-slate-500 uppercase tracking-[0.2em]">Mitigated Anomalies</div>
+            <div className="text-xl font-extrabold font-display text-sky-400 mt-2">
+              {byzantineState.spoofedVectorsMitigated} Vectors
             </div>
-            <div className="text-[11px] font-mono text-slate-500 mt-0.5">UWB peer trilateration</div>
+            <div className="text-[10px] font-mono text-slate-600 mt-1 font-bold uppercase tracking-wider">UWB Peer Trilateration</div>
           </div>
-          <Activity className="w-8 h-8 text-sky-500/30" />
+          <Activity className="w-8 h-8 text-sky-500/20" />
         </div>
       </div>
 
@@ -143,10 +140,10 @@ export const ByzantineDefensePanel: React.FC<ByzantineDefensePanelProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left: Adversary Attack Injector */}
         <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
-          <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-            <Zap className="w-4 h-4 text-amber-400" />
-            <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider">
-              Byzantine Adversary Simulator
+          <div className="flex items-center gap-3 border-b border-slate-800/60 pb-4 mb-2">
+            <Zap className="w-4 h-4 text-amber-500" />
+            <h3 className="text-xs font-extrabold text-white uppercase tracking-[0.2em] font-display">
+              Threat Vector Simulator
             </h3>
           </div>
 
@@ -224,30 +221,29 @@ export const ByzantineDefensePanel: React.FC<ByzantineDefensePanelProps> = ({
             </div>
           </div>
 
-          {/* Theoretical Validation Box */}
-          <div className="bg-slate-950/70 border border-slate-800/80 rounded-lg p-3 text-[11px] text-slate-400 space-y-1">
-            <div className="font-bold text-slate-300 font-mono text-xs flex items-center gap-1.5">
-              <Lock className="w-3.5 h-3.5 text-indigo-400" />
-              Consensus Sanity &amp; Isolation Principles:
+            <div className="bg-slate-950/80 border border-slate-800/40 rounded-xl p-4 text-[11px] text-slate-500 space-y-2">
+              <div className="font-extrabold text-slate-300 font-display text-xs uppercase tracking-wider flex items-center gap-2">
+                <Lock className="w-3.5 h-3.5 text-sky-500" />
+                Strategic Validation Principles
+              </div>
+              <p className="leading-relaxed font-medium">
+                The Anomaly-Aware Validator enforces strict mathematical bounds on auction bids (<span className="text-slate-400 font-bold">$y_k \leq 1.25 \cdot R_0$</span>) and kinematic consistency (<span className="text-slate-400 font-bold">{'$\Delta x / \Delta t \leq v_{max}$'}</span>). Nodes violating these physical constraints are quarantined to prevent global convergence degradation.
+              </p>
             </div>
-            <p className="leading-relaxed">
-              In an ad-hoc swarm mesh, the Consensus Sanity &amp; Isolation Validator enforces strict bid bounds (<span className="text-slate-200 font-mono">y_k ≤ 1.25 · R_0</span>) and kinematic consistency (<span className="text-slate-200 font-mono">Δx/Δt ≤ v_max</span>). Nodes violating physical constraints are automatically penalized and quarantined from consensus voting.
-            </p>
-          </div>
         </div>
 
-        {/* Right: Fleet Trust Scores & Quorum Table */}
-        <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col justify-between">
+        {/* Right: Fleet Trust Matrix */}
+        <div className="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-2xl p-6 flex flex-col shadow-sm">
           <div>
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
-              <div className="flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                <h3 className="text-sm font-bold text-slate-200 uppercase tracking-wider">
-                  Decentralized Node Trust Matrix
+            <div className="flex items-center justify-between border-b border-slate-800/60 pb-5 mb-6">
+              <div className="flex items-center gap-3">
+                <ShieldCheck className="w-5 h-5 text-emerald-500/60" />
+                <h3 className="text-sm font-extrabold text-white uppercase tracking-[0.2em] font-display">
+                  Fleet Trust Matrix
                 </h3>
               </div>
-              <span className="text-xs font-mono text-slate-400">
-                Active Nodes: <span className="text-emerald-400 font-bold">{totalDrones - compromisedDrones}</span> / {totalDrones}
+              <span className="text-xs font-mono font-bold text-slate-500 uppercase tracking-wider">
+                Operational: <span className="text-emerald-500">{totalDrones - compromisedDrones}</span> / {totalDrones}
               </span>
             </div>
 
