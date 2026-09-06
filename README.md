@@ -1,30 +1,72 @@
 [![SWARMOS CI Pipeline](https://github.com/your-org/swarmos/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/swarmos/actions/workflows/ci.yml)
 
-# SWARMOS: Secure & Resilient Swarm Orchestration
+# SWARMOS: Secure & Resilient Swarm Orchestration under Adversarial Degradation
 
-SWARMOS is a distributed swarm intelligence framework extending standard CBBA (Consensus-Based Bundle Algorithm) with Byzantine Anomaly Filtering and dynamic mesh recovery. It is designed to orchestrate fleets of autonomous agents operating under extreme environmental degradation (RF jamming, kinetic loss, adversarial infiltration).
+**SWARMOS** (Secure & Resilient Swarm Orchestration System) is an experimental research framework designed to evaluate and harden decentralized task allocation algorithms for autonomous multi-agent fleets (e.g., Manned-Unmanned Teaming / MUM-T). 
 
-## Key Features
-- **Formalized Threat Model**: Deep adversarial modeling of RF jamming, kinetic attrition, and Byzantine vectors. See [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
-- **Byzantine Anomaly Filter**: Quarantines poisoned bids and limits adversarial influence on the decentralized auction.
-- **Dynamic Phase 2 Consensus**: Strictly adheres to the 18-rule conflict resolution matrix (Choi et al., 2009) to guarantee conflict-free convergence.
-- **Continuous Re-Auctioning**: Surviving agents dynamically clear and re-bid orphaned tasks when peers drop from the mesh network.
+While traditional decentralized orchestration—specifically the Consensus-Based Bundle Algorithm (CBBA)—provides guaranteed polynomial-time convergence for cooperative agents, its standard formulation diverges catastrophically under adversarial conditions. This repository implements **BFT-CBBA** (Byzantine Fault-Tolerant CBBA), an extension engineered to operate within contested environments subject to active Electronic Warfare (RF jamming), kinetic attrition, and Byzantine node compromise.
 
-## Experimental Science & Reproducibility
-We provide a comprehensive Cartesian matrix benchmarking tool.
-To run the evaluation suite locally:
+## 1. Theoretical Foundation & Architecture
+
+SWARMOS bridges the gap between robotic kinematics and distributed systems security. Rather than relying on computationally heavy cryptographic voting rounds (like PBFT), which fail in highly partitioned, asynchronous RF networks, SWARMOS implements a **Kinematic Anomaly Filter**.
+
+### Core Contributions
+*   **Kinematic Byzantine Filtering:** Agents independently validate the physical feasibility of incoming bids. Bids that violate maximum velocity constraints, turn radii, or path-loss limits are rejected, and the offending transmitter is penalized.
+*   **Dynamic Phase-2 Consensus:** Extends the standard 18-rule conflict resolution matrix (Choi et al., 2009) to quarantine nodes whose trust metric drops below the $2f+1$ Byzantine threshold.
+*   **Continuous Re-Auctioning for Kinetic Attrition:** When an agent is destroyed (detected via telemetry heartbeat failure), its assigned subgraph of tasks is purged from the collective belief state and re-auctioned seamlessly by the surviving fleet.
+
+## 2. Experimental Framework & Reproducibility
+
+This repository contains both a high-fidelity Python simulation engine and a TypeScript/React visualization dashboard for empirical analysis.
+
+### Repository Structure
+*   `swarmos/swarm_engine/`: Core simulation physics, bid generation, and the BFT-CBBA consensus loop.
+*   `swarmos/research/`: Monte Carlo matrix generation, cartesian benchmarking scripts, and ablation study runners.
+*   `src/` & `server.ts`: A Vite + Express visualization dashboard that plots convergence graphs, packet loss heatmaps, and spatial node allocations.
+*   `docs/`: Contains the formalized `THREAT_MODEL.md` and pre-prints.
+
+### Running the Evaluation Suite
+We provide a comprehensive Cartesian matrix benchmarking tool to reproduce our empirical baseline comparisons (Static, Greedy, CBBA, SWARMOS).
+
+To run the accelerated ablation matrix locally:
 ```bash
 PYTHONPATH=swarmos python3 swarmos/research/reproduce.py --reduced
 ```
 
-To run a single deterministic scenario:
+To run a single deterministic scenario (e.g., 50% catastrophic packet loss with 16 nodes):
 ```bash
 PYTHONPATH=swarmos python3 swarmos/research/reproduce.py --algo SWARMOS --fleet 16 --tasks 25 --failure loss_50_catastrophic
 ```
 
-## Limitations & Future Work
-- The Byzantine filter relies on kinematic boundaries; sophisticated adversaries faking valid but suboptimal bids may still degrade efficiency.
-- Re-auctioning clears the entire bundle of a failed node, which may trigger cascading global re-allocations rather than localized patching.
+### Launching the Dashboard
+To visualize the generated empirical data in real-time:
+```bash
+npm install
+npm run build
+npm start
+```
+The dashboard will be available at `http://localhost:3000`.
 
-## Citations
+## 3. Threat Model & Known Limitations
+
+We evaluate SWARMOS honestly against a formalized threat model (see [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)). The system is built to mitigate catastrophic failure, but it is not immune to all vectors.
+
+### Mitigated Threats
+*   **Sybil / Bid Poisoning:** Mitigated physically. An adversary cannot bid arbitrarily high without violating kinematic constraints.
+*   **Network Partitioning:** Mitigated algorithmically. CBBA mathematically guarantees sub-graph convergence in partitioned networks; fleets resolve conflicts upon reconnection.
+
+### Accepted / Unmitigated Vulnerabilities
+*   **Stealth Suboptimal Bidding:** If an adversary compromises a node and submits mathematically valid but intentionally inefficient bids (e.g., moving exactly at minimum allowable speeds), the filter will not isolate them. This degrades global fleet efficiency.
+*   **Cascading Re-allocations:** Dynamic re-auctioning upon node death clears the entire bundle of the failed node. In highly saturated task environments, this can trigger a global cascade of re-allocations rather than a localized topological patch, temporarily spiking RF overhead.
+*   **Total RF Blackout:** If the jamming-to-signal ratio forces $100\%$ packet loss across all frequencies, SWARMOS fundamentally degrades to a localized `Greedy` heuristic, fully abandoning cooperative synergy.
+
+## 4. Citations & Literature
+
+This research builds upon foundational work in consensus algorithms and robotics.
+
 - Choi, H. L., Brunet, L., & How, J. P. (2009). Consensus-based decentralized auctions for robust task allocation. *IEEE Transactions on Robotics*, 25(4), 912-926.
+- Lamport, L., Shostak, R., & Pease, M. (1982). The Byzantine Generals Problem. *ACM Transactions on Programming Languages and Systems*.
+- Castro, M., & Liskov, B. (1999). Practical Byzantine Fault Tolerance. *OSDI*.
+
+---
+*Developed as an experimental research platform for decentralized systems resiliency.*
