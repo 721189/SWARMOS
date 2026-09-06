@@ -1,5 +1,5 @@
 import unittest
-from swarm_engine.bft_cbba import BftConsensusValidator, BftAgentStatus
+from swarm_engine.bft_cbba import ByzantineAnomalyFilter, BftAgentStatus
 from swarm_engine.cbba import CBBAEngine
 from swarm_engine.agents import Agent
 from swarm_engine.tasks import Task, TaskType
@@ -7,7 +7,7 @@ from swarm_engine.environment import SwarmEnvironment
 
 class TestBftConsensus(unittest.TestCase):
     def setUp(self):
-        self.validator = BftConsensusValidator(total_agents=4, max_velocity_mps=60.0)
+        self.validator = ByzantineAnomalyFilter(total_agents=4, max_velocity_mps=60.0)
         for aid in ["A1", "A2", "A3", "A4"]:
             self.validator.register_agent(aid)
 

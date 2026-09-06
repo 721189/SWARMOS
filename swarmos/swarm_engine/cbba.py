@@ -13,16 +13,23 @@ import copy
 import math
 import time
 from typing import Dict, List, Tuple, Optional, Any, Set
+from enum import Enum
 from .agents import Agent, AgentStatus
 from .tasks import Task, TaskStatus
-from .bft_cbba import BftConsensusValidator, BftAgentStatus
+from .bft_cbba import ByzantineAnomalyFilter, BftAgentStatus
+
+
+class AuctionTermination(Enum):
+    CONVERGED = "converged"
+    MAX_ITERATIONS = "max_iterations"
+    FAILED = "failed"
 
 class CBBAEngine:
     def __init__(
         self,
         lambda_decay: float = 0.95,
         bid_epsilon: float = 1e-4,
-        bft_validator: Optional[BftConsensusValidator] = None
+        bft_validator: Optional[ByzantineAnomalyFilter] = None
     ):
         self.lambda_decay = lambda_decay
         self.bid_epsilon = bid_epsilon
@@ -76,11 +83,12 @@ class CBBAEngine:
         self,
         agents: Dict[str, Agent],
         tasks: Dict[str, Task]
-    ) -> None:
+    ) -> bool:
         """
         Phase 1: Each agent builds or extends its task bundle (b_i) and optimal path (p_i)
         by greedily evaluating the marginal gain c_ij of inserting unallocated tasks.
         """
+        changes_occurred = False
         for agent in agents.values():
             if not agent.health.is_operational() or agent.status == AgentStatus.JAMMED:
                 continue
@@ -123,6 +131,9 @@ class CBBAEngine:
                 else:
                     break  # No further task provides positive marginal gain over existing bids
 
+        return changes_occurred
+
+
     def phase2_consensus_conflict_resolution(
         self,
         agents: Dict[str, Agent],
@@ -130,54 +141,41 @@ class CBBAEngine:
         communication_links: Any,
         env: Optional[Any] = None
     ) -> bool:
-        """
-        Phase 2: Local 1-hop peer communication and conflict resolution.
-        Applies standard CBBA rules table between agent i and neighbor k.
-        Transmits actual mesh packets through env when provided, observing real packet drops.
-        """
         changes_occurred = False
         current_time = time.time()
-
-        # Build adjacency neighbor map
-        neighbors_map: Dict[str, List[str]] = {aid: [] for aid in agents.keys()}
-        for pair in communication_links:
-            a1, a2 = pair[0], pair[1]
-            if a1 in neighbors_map and a2 in neighbors_map:
-                neighbors_map[a1].append(a2)
-                neighbors_map[a2].append(a1)
-
-        # Each agent exchanges state with immediate neighbors
+        if isinstance(communication_links, list):
+            neighbors_map = {a_id: [] for a_id in agents.keys()}
+            for link in communication_links:
+                neighbors_map[link[0]].append(link[1])
+                neighbors_map[link[1]].append(link[0])
+        else:
+            neighbors_map = communication_links
+            
         for i_id, agent_i in agents.items():
-            if not agent_i.health.is_operational():
-                continue
-
-            for k_id in neighbors_map[i_id]:
+            if not agent_i.health.is_operational(): continue
+            for k_id in set(neighbors_map.get(i_id, [])):
                 agent_k = agents[k_id]
-                if not agent_k.health.is_operational():
-                    continue
-
-                # BFT Quarantine / Ejection check
+                if not agent_k.health.is_operational(): continue
                 if self.bft_validator is not None:
                     k_status = self.bft_validator.agent_statuses.get(k_id, BftAgentStatus.TRUSTED)
-                    if k_status in (BftAgentStatus.QUARANTINED, BftAgentStatus.EJECTED):
-                        continue
-
-                # Simulate real network transmission between k and i
+                    if k_status in (BftAgentStatus.QUARANTINED, BftAgentStatus.EJECTED): continue
                 if env is not None and hasattr(env, "transmit_packet"):
                     delivered = env.transmit_packet(k_id, i_id, payload_bytes=128)
-                    if not delivered:
-                        # Dropped packet: agent_i does not receive agent_k's state this iteration
-                        continue
-
-                # Process every known task j in the universe
+                    if not delivered: continue
+                    
+                s_kk = agent_k.timestamps.get(k_id, current_time)
+                agent_i.timestamps[k_id] = max(agent_i.timestamps.get(k_id, 0.0), s_kk)
+                for m_id in agents.keys():
+                    if m_id not in (i_id, k_id):
+                        s_im = agent_i.timestamps.get(m_id, 0.0)
+                        s_km = agent_k.timestamps.get(m_id, 0.0)
+                        agent_i.timestamps[m_id] = max(s_im, s_km)
+                
                 for task_id in tasks.keys():
                     y_i = agent_i.winning_bids.get(task_id, 0.0)
                     z_i = agent_i.winning_agents.get(task_id, None)
-
                     y_k = agent_k.winning_bids.get(task_id, 0.0)
                     z_k = agent_k.winning_agents.get(task_id, None)
-
-                    # BFT Validation on claimed winning bid
                     if self.bft_validator is not None and z_k is not None and y_k > 0:
                         task_obj = tasks.get(task_id)
                         base_r = task_obj.base_reward if task_obj else 100.0
@@ -185,80 +183,44 @@ class CBBAEngine:
                         if not valid_bid:
                             self._record_decision(i_id, task_id, "REJECT_BFT", reason or "Poisoned BFT bid")
                             continue
-
+                            
+                    action = "LEAVE"
+                    s_im = agent_i.timestamps.get(z_i, 0.0) if z_i else 0.0
+                    s_km = agent_k.timestamps.get(z_i, 0.0) if z_i else 0.0
                     s_ik = agent_i.timestamps.get(k_id, 0.0)
-                    s_kk = agent_k.timestamps.get(k_id, current_time)
-
-                    # Determine action for task_id based on CBBA Rule Matrix:
-                    action = "LEAVE" # "UPDATE", "RESET", or "LEAVE"
-
-                    if z_k == k_id:
-                        if z_i == i_id:
-                            if y_k > (y_i + self.bid_epsilon):
-                                action = "UPDATE"
-                            elif abs(y_k - y_i) <= self.bid_epsilon and k_id < i_id:
-                                # Tie breaker based on unique agent ID
-                                action = "UPDATE"
-                            else:
-                                action = "LEAVE"
-                        elif z_i == k_id:
-                            action = "UPDATE"
-                        elif z_i is None:
-                            action = "UPDATE"
+                    
+                    if z_i is None:
+                        if z_k is not None and y_k > 0: action = "UPDATE"
+                    elif z_i == z_k:
+                        if z_i == i_id: action = "LEAVE"
+                        elif z_i == k_id: action = "UPDATE"
                         else:
-                            s_im = agent_i.timestamps.get(z_i, 0.0)
-                            if s_kk > s_im:
-                                action = "UPDATE"
-                            elif y_k > y_i:
-                                action = "UPDATE"
-                    elif z_k == i_id:
-                        if z_i == i_id:
-                            action = "LEAVE"
-                        elif z_i == k_id:
-                            action = "RESET"
-                        elif z_i is None:
-                            action = "LEAVE"
+                            if s_km > s_im or (s_km == s_im and y_k > y_i): action = "UPDATE"
+                    elif z_i == i_id:
+                        if z_k == k_id:
+                            if y_k > y_i + self.bid_epsilon: action = "UPDATE"
+                            elif abs(y_k - y_i) <= self.bid_epsilon and k_id < i_id: action = "UPDATE"
+                        elif z_k is None: action = "LEAVE"
                         else:
-                            action = "RESET"
-                    elif z_k is None:
-                        if z_i == i_id:
-                            action = "LEAVE"
-                        elif z_i == k_id:
-                            action = "UPDATE"
-                        elif z_i is None:
-                            action = "LEAVE"
-                        else:
-                            s_im = agent_i.timestamps.get(z_i, 0.0)
-                            if s_kk > s_im:
-                                action = "UPDATE"
+                            if y_k > y_i + self.bid_epsilon: action = "UPDATE"
+                    elif z_i == k_id:
+                        if z_k is None: action = "RESET"
+                        else: action = "UPDATE"
                     else:
-                        m_id = z_k
-                        s_km = agent_k.timestamps.get(m_id, 0.0)
-                        s_im = agent_i.timestamps.get(m_id, 0.0)
-
-                        if z_i == i_id:
-                            if s_km > s_im and y_k > y_i:
-                                action = "UPDATE"
-                            elif s_km > s_im and abs(y_k - y_i) <= self.bid_epsilon and m_id < i_id:
-                                action = "UPDATE"
-                            elif s_kk > s_im and abs(y_k - y_i) > self.bid_epsilon:
-                                action = "UPDATE"
-                        elif z_i == k_id:
-                            action = "UPDATE"
-                        elif z_i == m_id:
-                            if s_km > s_im:
-                                action = "UPDATE"
-                        elif z_i is None:
-                            action = "UPDATE"
+                        m = z_i
+                        s_km_current = agent_k.timestamps.get(m, 0.0)
+                        s_im_current = agent_i.timestamps.get(m, 0.0)
+                        if z_k == k_id:
+                            if s_km_current > s_im_current and y_k > y_i: action = "UPDATE"
+                            elif s_kk > s_im_current and y_k > y_i: action = "UPDATE"
+                        elif z_k == i_id:
+                            if s_km_current > s_im_current: action = "RESET"
+                        elif z_k is None:
+                            if s_km_current > s_im_current: action = "RESET"
                         else:
-                            p_id = z_i
-                            s_ip = agent_i.timestamps.get(p_id, 0.0)
-                            if s_km > s_ip and y_k > y_i:
-                                action = "UPDATE"
-                            elif s_kk > s_ip:
-                                action = "RESET"
-
-                    # Execute resolved rule action
+                            if s_km_current > s_im_current and y_k > y_i: action = "UPDATE"
+                            elif s_km_current > s_im_current and y_k <= y_i: action = "RESET"
+                    
                     if action == "UPDATE":
                         if agent_i.winning_agents.get(task_id) != z_k or abs(agent_i.winning_bids.get(task_id, 0.0) - y_k) > self.bid_epsilon:
                             agent_i.winning_agents[task_id] = z_k
@@ -270,27 +232,23 @@ class CBBAEngine:
                             agent_i.winning_agents[task_id] = None
                             agent_i.winning_bids[task_id] = 0.0
                             changes_occurred = True
-                            self._record_decision(i_id, task_id, "RESET", f"Reset bid on outbid/expired assignment")
-
-            # Post-consensus pruning:
+                            self._record_decision(i_id, task_id, "RESET", "Reset bid")
+                            
             dropped_idx = -1
             for b_idx, tid in enumerate(agent_i.bundle):
                 if agent_i.winning_agents.get(tid) != agent_i.id:
                     dropped_idx = b_idx
                     break
-
             if dropped_idx != -1:
                 for drop_tid in agent_i.bundle[dropped_idx:]:
-                    if drop_tid in agent_i.path:
-                        agent_i.path.remove(drop_tid)
+                    if drop_tid in agent_i.path: agent_i.path.remove(drop_tid)
                     if agent_i.winning_agents.get(drop_tid) == agent_i.id:
                         agent_i.winning_agents[drop_tid] = None
                         agent_i.winning_bids[drop_tid] = 0.0
                 agent_i.bundle = agent_i.bundle[:dropped_idx]
                 changes_occurred = True
-
+                
         return changes_occurred
-
     def _record_decision(self, agent_id: str, task_id: str, action: str, reason: str) -> None:
         self.decision_logs.append({
             "timestamp": round(time.time(), 3),
@@ -302,6 +260,27 @@ class CBBAEngine:
         if len(self.decision_logs) > 100:
             self.decision_logs.pop(0)
 
+
+    def check_invariants(self, agents: Dict[str, Agent], tasks: Dict[str, Task]) -> None:
+        """
+        Verifies algorithmic guarantees during the auction phase.
+        Must fail loudly if any invariant is violated.
+        """
+        for a_id, agent in agents.items():
+            if len(agent.bundle) != len(agent.path):
+                raise RuntimeError(f"Invariant Violation: Agent {a_id} bundle length ({len(agent.bundle)}) does not match path length ({len(agent.path)})")
+            for t_id in agent.bundle:
+                if t_id not in agent.path:
+                    raise RuntimeError(f"Invariant Violation: Task {t_id} is in Agent {a_id}'s bundle but missing from its path")
+            for t_id, z_agent in agent.winning_agents.items():
+                y_bid = agent.winning_bids.get(t_id, 0.0)
+                if z_agent is not None:
+                    if y_bid < 0.0:
+                        raise RuntimeError(f"Invariant Violation: Agent {a_id} recorded negative bid {y_bid} for task {t_id}")
+                else:
+                    if y_bid > 0.0:
+                        raise RuntimeError(f"Invariant Violation: Agent {a_id} has positive bid for task {t_id} with no winning agent")
+
     def run_auction_round(
         self,
         agents: Dict[str, Agent],
@@ -309,20 +288,29 @@ class CBBAEngine:
         communication_links: Any,
         max_iterations: int = 15,
         env: Optional[Any] = None
-    ) -> bool:
+    ) -> dict:
         """
         Runs full alternating Bundle Construction & Consensus Resolution iterations
         until fleet convergence or max_iterations reached.
         """
+        changed = False
         for it in range(max_iterations):
             self.consensus_iterations += 1
-            # Phase 1: Construction
-            self.phase1_bundle_construction(agents, tasks)
-            # Phase 2: Consensus
-            changed = self.phase2_consensus_conflict_resolution(agents, tasks, communication_links, env=env)
+            c1 = self.phase1_bundle_construction(agents, tasks)
+            c2 = self.phase2_consensus_conflict_resolution(agents, tasks, communication_links, env=env)
+            changed = c1 or c2
+            self.check_invariants(agents, tasks)
+
             if not changed and it > 0:
                 self.has_converged = True
-                return True
-
-        self.has_converged = True
-        return True
+                return {
+                    "status": AuctionTermination.CONVERGED,
+                    "iterations": it + 1,
+                    "changes_last_iteration": False
+                }
+        self.has_converged = False
+        return {
+            "status": AuctionTermination.MAX_ITERATIONS,
+            "iterations": max_iterations,
+            "changes_last_iteration": changed
+        }

@@ -26,7 +26,7 @@ class TestCBBAEngine(unittest.TestCase):
     def test_cbba_convergence(self):
         comm_links = list(self.env.update_mesh_network())
         converged = self.cbba.run_auction_round(self.env.agents, self.env.tasks, comm_links, max_iterations=10, env=self.env)
-        self.assertTrue(converged)
+        self.assertEqual(converged["status"].value, "converged")
         
         # Check that no task is assigned to more than one agent
         assigned_tasks = []

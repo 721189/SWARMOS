@@ -669,7 +669,7 @@ export default function App() {
         <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span>SWARMOS Strategic Autonomous Swarm Intelligence • CBBA-BFT Consensus Protocol</span>
+            <span>SWARMOS Strategic Autonomous Swarm Intelligence • CBBA-Byzantine Anomaly Filter</span>
           </div>
           <div className="flex items-center gap-4 text-slate-400">
             <span>MUM-T Air+Ground+Surface</span>

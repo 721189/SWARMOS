@@ -95,7 +95,7 @@ class SwarmOrchestrator:
         """Runs multi-round CBBA until convergence."""
         self.metrics.start_consensus_timer()
         comm_links = list(self.env.update_mesh_network())
-        converged = self.cbba.run_auction_round(
+        res = self.cbba.run_auction_round(
             agents=self.env.agents,
             tasks=self.env.tasks,
             communication_links=comm_links,

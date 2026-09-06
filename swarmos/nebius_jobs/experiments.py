@@ -25,7 +25,7 @@ from swarm_engine.agents import Agent, AgentStatus
 from swarm_engine.tasks import Task, TaskType, TaskStatus
 from swarm_engine.environment import SwarmEnvironment, Obstacle, ThreatZone
 from swarm_engine.cbba import CBBAEngine
-from swarm_engine.bft_cbba import BftConsensusValidator, BftAgentStatus
+from swarm_engine.bft_cbba import ByzantineAnomalyFilter, BftAgentStatus
 from swarm_engine.failures import FailureInjector
 from swarm_engine.metrics import SwarmMetricsTracker
 from ai_layer.safety_compiler import SafetyCompiler
@@ -119,7 +119,7 @@ def run_single_baseline_trial(
     cbba_engine = None
     bft_validator = None
     if algorithm == "SWARMOS":
-        bft_validator = BftConsensusValidator(total_agents=fleet_size, max_velocity_mps=80.0)
+        bft_validator = ByzantineAnomalyFilter(total_agents=fleet_size, max_velocity_mps=80.0)
         for aid in agents.keys():
             bft_validator.register_agent(aid)
         cbba = CBBAEngine(lambda_decay=0.95, bid_epsilon=1e-4, bft_validator=bft_validator)

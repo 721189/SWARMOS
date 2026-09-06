@@ -100,7 +100,7 @@ export const ByzantineDefensePanel: React.FC<ByzantineDefensePanelProps> = ({
           <Radio className={`w-8 h-8 ${byzantineState.isGpsDenied ? 'text-amber-500/30' : 'text-emerald-500/30'}`} />
         </div>
 
-        {/* BFT Consensus Quorum */}
+        {/* Byzantine Anomaly Filter */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
           <div>
             <div className="text-xs font-mono text-slate-400 uppercase tracking-wider">BFT Quorum Health</div>

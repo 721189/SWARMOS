@@ -14,7 +14,7 @@ class BftAgentStatus:
     QUARANTINED = "QUARANTINED"
     EJECTED = "EJECTED"
 
-class BftConsensusValidator:
+class ByzantineAnomalyFilter:
     """
     Validates auction bids and agent kinematics before accepting consensus updates.
     Guarantees convergence if N >= 3f + 1 where f is number of Byzantine nodes.

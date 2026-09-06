@@ -588,7 +588,7 @@ Domain Coordination Summary:
                 };
               });
             }, 0);
-            continue; // Reject rogue bid under BFT consensus rule
+            continue; // Reject rogue bid under Byzantine anomaly rules
           }
         }
 
@@ -1319,7 +1319,7 @@ Autonomous Re-planning Decision:
     });
 
     if (isAttacking) {
-      addLog(`[CYBER ATTACK] Adversary injected ${attack} into node ${agentId} (${agentCallsignMap[agentId] || agentId}). BFT consensus filter actively monitoring.`);
+      addLog(`[CYBER ATTACK] Adversary injected ${attack} into node ${agentId} (${agentCallsignMap[agentId] || agentId}). Byzantine anomaly filter actively monitoring.`);
       setTimeout(() => {
         triggerAuction();
       }, 50);
