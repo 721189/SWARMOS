@@ -9,6 +9,10 @@ const PORT = 3000;
 
 app.use(express.json());
 
+// Serve static documents and figures
+app.use("/docs", express.static(path.join(process.cwd(), "docs")));
+app.use("/figures", express.static(path.join(process.cwd(), "public", "figures")));
+
 // Ensure results directory exists
 const RESULTS_DIR = path.join(process.cwd(), "results");
 if (!fs.existsSync(RESULTS_DIR)) {
