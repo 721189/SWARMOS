@@ -27,7 +27,7 @@
       },
       {
         "name": "loss_50_catastrophic",
-        "motor_failure_rate": 0.2,
+        "motor_failure_rate": 0.5,
         "rf_jamming_active": true,
         "packet_loss_rate": 0.50
       },

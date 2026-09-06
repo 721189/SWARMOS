@@ -555,7 +555,7 @@ export const SwarmCanvas: React.FC<SwarmCanvasProps> = ({
       const [ax, ay] = agent.position;
       const isSelected = selectedAgentId === agent.id;
       const isFailed = agent.status === 'FAILED' || agent.health.propulsion <= 0.1;
-      const isJammed = agent.status === 'JAMMED' || agent.health.comms < 0.3;
+      const isJammed = agent.status === 'JAMMED' || (agent.health.comms_transceiver ?? agent.health.comms ?? 1.0) < 0.3;
       const isRecharging = agent.status === 'RECHARGING';
       const callsign = agentCallsignMap[agent.id] || agent.id;
 

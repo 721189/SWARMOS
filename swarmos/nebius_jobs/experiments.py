@@ -255,7 +255,7 @@ def run_single_baseline_trial(
                     )
                     if not valid:
                         logger.warning(f"SWARMOS_ANOMALY_DETECTED: Agent {agent.id} quarantined. Reason: {reason}")
-                        agent.health.comms = 0.0 # Effectively isolate
+                        agent.health.comms_transceiver = 0.0 # Effectively isolate
                         agent.status = AgentStatus.FAILED
                         detected_failures.append(agent.id)
 
@@ -272,10 +272,11 @@ def run_single_baseline_trial(
                     failed_agents.append("A2")
                 failure_injector.inject_rf_jamming((550.0, 400.0), radius=220.0)
             elif failure_mode == "loss_50_catastrophic":
-                num_to_fail = max(1, int(fleet_size * 0.2))
+                # Real 50% failure level: Attrite 50% of the fleet size
+                num_to_fail = max(1, int(fleet_size * 0.5))
                 for i in range(num_to_fail):
                     fa_id = f"A{i+1}"
-                    failure_injector.inject_motor_failure(fa_id, "Catastrophic loss")
+                    failure_injector.inject_motor_failure(fa_id, "Catastrophic 50% fleet loss")
                     failed_agents.append(fa_id)
                 failure_injector.inject_rf_jamming((600.0, 350.0), radius=260.0)
             elif failure_mode == "adversarial_nodes":

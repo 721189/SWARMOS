@@ -151,3 +151,29 @@ class SafetyCompiler:
             "safety_verdict": "APPROVED",
             "compiled_at_logical": 0 # Deterministic place holder, remove wall-clock
         }
+
+if __name__ == "__main__":
+    import sys
+    import json
+    
+    input_str = ""
+    if len(sys.argv) > 1:
+        input_str = sys.argv[1]
+    else:
+        input_str = sys.stdin.read()
+        
+    if not input_str.strip():
+        print(json.dumps({"status": "ERROR", "error": "No input manifest provided"}))
+        sys.exit(1)
+        
+    try:
+        raw_manifest = json.loads(input_str)
+        compiler = SafetyCompiler()
+        compiled = compiler.compile_and_validate(raw_manifest)
+        print(json.dumps({"status": "APPROVED", "compiled": compiled}))
+    except SafetyViolationError as sve:
+        print(json.dumps({"status": "SAFETY_VIOLATION", "error": str(sve)}))
+        sys.exit(2)
+    except Exception as e:
+        print(json.dumps({"status": "ERROR", "error": str(e)}))
+        sys.exit(1)

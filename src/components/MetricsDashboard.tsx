@@ -118,7 +118,7 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {agents.map((agent) => {
             const isFailed = agent.status === 'FAILED' || agent.health.propulsion <= 0.1;
-            const isJammed = agent.status === 'JAMMED' || agent.health.comms < 0.3;
+            const isJammed = agent.status === 'JAMMED' || (agent.health.comms_transceiver ?? agent.health.comms ?? 1.0) < 0.3;
             return (
               <div
                 key={agent.id}

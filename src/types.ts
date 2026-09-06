@@ -61,7 +61,8 @@ export interface AlgorithmBenchmark {
 
 export interface AgentHealth {
   propulsion: number; // 0 to 1
-  comms: number;
+  comms_transceiver: number; // 0 to 1 RF transceiver health
+  comms?: number; // backwards compatibility alias
   gps: number;
   battery: number; // 0 to 100
 }

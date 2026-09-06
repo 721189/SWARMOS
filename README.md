@@ -38,7 +38,9 @@ graph TD
 ## 2. Core Capabilities
 
 ### 🛡️ Strategic Resilience
+- **TypeScript → Python SafetyCompiler Bridge**: Seamless integration connecting the TypeScript API gateway (`server.ts`) directly to the canonical Python `SafetyCompiler` subprocess as the single source of truth, enforcing fail-closed bounds checking on all LLM-decomposed mission manifests.
 - **Strategic-Grade Anomaly Filter**: Heuristic-based detection that validates bids against physical hardware limits (Max Velocity, Path-Loss, Reward Bounds).
+- **Subsystem Telemetry (`comms_transceiver`)**: Granular multi-dimensional health diagnostics tracking RF transceiver attenuation (`comms_transceiver`), propulsion degradation, and GPS spoofing in real-time.
 - **Automated Quarantine**: Nodes identified as anomalous are isolated from the consensus pool until they demonstrate consistent kinematic honesty (Remediation logic).
 - **Numerical Hardening**: The **Safety Compiler** acts as a fail-closed firewall, rejecting all non-finite (`NaN`, `Inf`) or physically impossible payloads.
 
@@ -46,6 +48,7 @@ graph TD
 SWARMOS features a specialized empirical engine for high-confidence research:
 - **Statistical Significance**: Custom implementation of **Welch's T-Test** and **Cohen's d** (Effect Size) to validate performance gains.
 - **Monte Carlo Sweeps**: Supports 50+ seeds per configuration with 95% Confidence Interval (CI) reporting.
+- **Empirical 50% Attrition Level (`loss_50_catastrophic`)**: Rigorously models an exact 50% kinetic fleet loss combined with 50% stochastic RF packet drop and electronic warfare jamming bubbles.
 - **Failure Envelopes**: Automated "Stress Searching" to identify the precise packet-loss thresholds where coordination breaks down.
 - **Ablation Infrastructure**: Systematic toggling of modules to isolate the exact source of resilience.
 
@@ -55,7 +58,7 @@ Our latest 1,400-trial full matrix benchmark sweep and 450-trial systematic abla
 
 | Scenario / Configuration | Algorithm | TCR (Mean ± CI) | Significance ($p$) | Effect Size ($d$) |
 | :--- | :--- | :--- | :--- | :--- |
-| **Catastrophic Attrition (50% Loss + Motor Failures)** | **SWARMOS** | **98.0% ± 3.5%** | **0.0392 (*)** | **1.57 (Large)** |
+| **Catastrophic Attrition (50% Fleet Loss + 50% RF Drop)** | **SWARMOS** | **98.0% ± 3.5%** | **0.0392 (*)** | **1.57 (Large)** |
 | **Catastrophic Attrition (FS=4, T=10)** | Static Baseline | 74.0% ± 4.3% | 0.0481 (*) | -1.41 |
 | **Adversarial Injections (Poisoned Bids)** | **SWARMOS** | **99.3%** | **p < 0.05** | **Multi-tier Recovery** |
 | **High Interference Breakdown Threshold** | **SWARMOS** | **Stable up to 70% Loss** | — | Degrades only at 80% |

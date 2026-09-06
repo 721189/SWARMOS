@@ -1,6 +1,9 @@
+import { execFileSync } from "child_process";
+import path from "path";
+
 /**
- * Deterministic Safety Compiler for SWARMOS (TypeScript Port).
- * Ensures Gemini missions adhere to the same physical boundaries as the simulation.
+ * Deterministic Safety Compiler for SWARMOS (TypeScript -> Python Integration).
+ * Integrates TypeScript server routes directly with Python's canonical SafetyCompiler.
  */
 
 export interface Task {
@@ -30,7 +33,44 @@ export class SafetyCompiler {
   private minAgents = 2;
   private baseOrigin: [number, number] = [120.0, 680.0];
 
-  validate(manifest: MissionManifest): MissionManifest {
+  validate(manifest: MissionManifest): any {
+    // 1. Primary Canonical Execution: Invoke Python SafetyCompiler as the single source of truth
+    try {
+      const scriptPath = path.join(process.cwd(), "swarmos", "ai_layer", "safety_compiler.py");
+      const stdout = execFileSync("python3", [scriptPath, JSON.stringify(manifest)], {
+        cwd: process.cwd(),
+        encoding: "utf-8",
+        maxBuffer: 10 * 1024 * 1024
+      });
+
+      const res = JSON.parse(stdout.trim());
+      if (res.status === "APPROVED" && res.compiled) {
+        return res.compiled;
+      } else {
+        throw new Error(res.error || "Mission manifest rejected by Python SafetyCompiler");
+      }
+    } catch (err: any) {
+      // Check if Python returned a structured safety rejection
+      if (err.stdout) {
+        try {
+          const parsed = JSON.parse(err.stdout.trim());
+          if (parsed.error) {
+            throw new Error(`Safety Violation: ${parsed.error}`);
+          }
+        } catch (_) {}
+      }
+
+      // If python process failure wasn't a standard exit code 2 safety violation, verify if node fallback is needed
+      if (err.message && err.message.startsWith("Safety Violation:")) {
+        throw err;
+      }
+
+      // Fallback deterministic validation in pure TypeScript if python executable is unavailable
+      return this.validateTypeScriptFallback(manifest);
+    }
+  }
+
+  private validateTypeScriptFallback(manifest: MissionManifest): MissionManifest {
     const { tasks, constraints } = manifest;
 
     if (!constraints) throw new Error("Safety Violation: Missing constraints.");
@@ -76,3 +116,4 @@ export class SafetyCompiler {
     };
   }
 }
+
