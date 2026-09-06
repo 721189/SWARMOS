@@ -26,6 +26,8 @@
 
 ## 🏛️ System Architecture
 
+![System Architecture](./architecture.png)
+
 ```
                                   [ Tactical Commander ]
                                              │
@@ -55,6 +57,93 @@
        │   CBBA      │◄─────►│   CBBA      │◄─────►│   CBBA      │
        │ Bundle/Path │ (1-Hop│ Bundle/Path │ (1-Hop│ Bundle/Path │
        └─────────────┘  Mesh)└─────────────┘  Mesh)└─────────────┘
+```
+
+---
+
+## 📊 Operational Workflows
+
+### 1. Mission Ingestion & Task Decomposition
+The strategic pipeline translates natural language commander intent into deterministic tactical execution via LLM-facilitated structural parsing.
+
+```mermaid
+graph TD
+    User([Tactical Commander]) -->|Natural Language Prompt| Nemotron[NVIDIA Nemotron-4-340B]
+    Nemotron -->|JSON Schema Extraction| Orchestrator[Swarm Orchestrator]
+    Orchestrator -->|Task Manifest| Agents[Distributed Agent Mesh]
+    
+    subgraph "Decentralized Consensus Phase"
+        Agents -->|Phase 1: Bundle Building| Local[Local Greedy Selection]
+        Local -->|Phase 2: Consensus| Mesh[P2P SDR Mesh Sync]
+        Mesh -->|Conflict Resolution| Convergence{Converged?}
+        Convergence -->|No: Re-bid| Local
+        Convergence -->|Yes| Execution[Kinetic Execution]
+    end
+```
+
+### 2. Strategic-Grade Anomaly Mitigation
+SWARMOS utilizes kinematic bounds-checking and physical verification to isolate malicious or failing nodes from the global consensus.
+
+```mermaid
+sequenceDiagram
+    participant A as Honest Agent (Peer)
+    participant B as Anomalous Agent
+    participant F as Anomaly Filter
+    participant Q as Quarantine Pool
+
+    B->>A: Broadcast Poison Bid (y_k >> R_0)
+    A->>F: Intercept & Validate Bid
+    F-->>F: Check Kinematic Consistency
+    F-->>F: Check Auction Bound Rules
+    Alt Invalid Physical State
+        F->>Q: Isolate Agent B
+        Q->>A: Update Trust Matrix (Score: 0.0)
+        A->>A: Purge Bids from Agent B
+        A->>A: Trigger Emergency Re-auction
+    Else Valid State
+        F->>A: Accept Bid for Consensus
+    End
+```
+
+### 3. CBBA Consensus State Machine
+Each node maintains a local view of the world ($L_i$) and synchronizes with neighbors to reach a conflict-free global assignment.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle
+    Idle --> BundleBuilding: New Task Manifest
+    BundleBuilding --> Syncing: Local Bundle Complete
+    Syncing --> ConflictResolution: Receive Peer Timestamp (tau_j)
+    ConflictResolution --> Updating: Peer has newer/better info
+    ConflictResolution --> Syncing: Local info is superior
+    Updating --> BundleBuilding: Local bundle invalidated
+    Updating --> Converged: Fleet consistency reached
+    Converged --> Monitoring: In-flight execution
+    Monitoring --> BundleBuilding: Dynamic failure detected
+```
+
+### 4. Heterogeneous Fleet Architecture (MUM-T)
+SWARMOS supports multi-domain coordination across diverse agent profiles with unique kinematic constraints and sensor payloads.
+
+```mermaid
+graph LR
+    subgraph "Aerial Tier"
+        A1[MQ-9 Reaper] --- A2[Alpha Drone]
+        A2 --- A3[Relay Node]
+    end
+    
+    subgraph "Surface Tier"
+        S1[UGV Scout] --- S2[Logistics Hub]
+    end
+    
+    subgraph "Command & Control"
+        CC[ATAK Gateway] --- A2
+        CC --- S1
+    end
+    
+    A1 -.->|Kinematic Bounds| F[Anomaly Filter]
+    S2 -.->|Kinematic Bounds| F
+    F -->|Quarantine| Q[Isolated Pool]
 ```
 
 ---
