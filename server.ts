@@ -6,6 +6,7 @@ import { createServer as createViteServer } from "vite";
 
 import { ai } from "./lib/gemini";
 import { Type } from "@google/genai";
+import { SafetyCompiler } from "./swarmos/ai_layer/safety_compiler";
 
 const app = express();
 const PORT = 3000;
@@ -22,8 +23,12 @@ app.post("/api/gemini/strategic-plan", async (req, res) => {
     }
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.8-flash",
-      contents: `Decompose the following high-level drone swarm mission into technical task parameters for a CBBA (Consensus-Based Bundle Algorithm) coordination engine: "${mission_prompt}"`,
+      model: "gemini-1.5-flash",
+      contents: `Decompose the following high-level drone swarm mission into technical task parameters for a CBBA (Consensus-Based Bundle Algorithm) coordination engine: "${mission_prompt}"
+      
+      CRITICAL: You must provide a valid position [x, y] where x is 0-1200 and y is 0-800. 
+      Total mission payload must not exceed 5.0kg. 
+      Mission must be within 1200m range of origin [120, 680].`,
       config: {
         systemInstruction: "You are the SWARMOS Strategic Mission Planner. Your goal is to translate human natural language mission intents into machine-readable task payloads. Focus on mission priority, required payloads (sensors), and geographic distribution.",
         responseMimeType: "application/json",
@@ -37,27 +42,56 @@ app.post("/api/gemini/strategic-plan", async (req, res) => {
               items: {
                 type: Type.OBJECT,
                 properties: {
-                  task_type: { type: Type.STRING, enum: ["RECON", "DELIVERY", "RESCUE", "MONITORING"] },
-                  location_description: { type: Type.STRING },
-                  reward_multiplier: { type: Type.NUMBER },
-                  required_payload: { type: Type.STRING }
+                  id: { type: Type.STRING },
+                  type: { type: Type.STRING, enum: ["RECON", "DELIVERY", "RESCUE", "MONITORING"] },
+                  position: { 
+                    type: Type.ARRAY, 
+                    items: { type: Type.NUMBER },
+                    minItems: 2,
+                    maxItems: 2
+                  },
+                  base_reward: { type: Type.NUMBER },
+                  duration: { type: Type.NUMBER },
+                  payload_kg: { type: Type.NUMBER }
                 },
-                required: ["task_type", "location_description", "reward_multiplier"]
+                required: ["id", "type", "position", "base_reward", "duration", "payload_kg"]
               }
+            },
+            constraints: {
+              type: Type.OBJECT,
+              properties: {
+                max_range_meters: { type: Type.NUMBER },
+                minimum_active_agents: { type: Type.NUMBER }
+              },
+              required: ["max_range_meters", "minimum_active_agents"]
             },
             risk_assessment: { type: Type.STRING }
           },
-          required: ["mission_name", "strategic_priority", "tasks", "risk_assessment"]
+          required: ["mission_name", "strategic_priority", "tasks", "constraints", "risk_assessment"]
         }
       }
     });
 
-    const plan = JSON.parse(response.text || "{}");
-    res.json({
-      status: "success",
-      source: "Gemini 3.8 Flash (Strategic Layer)",
-      plan
-    });
+    const rawPlan = JSON.parse(response.text || "{}");
+    
+    // P0: Gemini missions must terminate at the same SafetyCompiler boundary
+    const compiler = new SafetyCompiler();
+    try {
+      const validatedPlan = compiler.validate(rawPlan);
+      res.json({
+        status: "success",
+        source: "Gemini 1.5 Flash (Strategic Layer)",
+        validation: "SAFETY_VERIFIED_DETREMINISTIC",
+        plan: validatedPlan
+      });
+    } catch (safetyErr: any) {
+      res.status(400).json({
+        error: "Safety Violation: Gemini mission rejected by deterministic compiler",
+        details: safetyErr.message,
+        raw_plan: rawPlan
+      });
+    }
+
   } catch (error: any) {
     console.error("Gemini strategic planning error:", error);
     res.status(500).json({ error: "Gemini mission decomposition failed", details: error.message });

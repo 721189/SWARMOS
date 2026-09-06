@@ -84,13 +84,13 @@ def compute_stats(data: List[float]) -> Dict[str, float]:
         "n": n
     }
 
-def compute_paired_t_test(group1: List[float], group2: List[float]) -> float:
+def compute_paired_t_test(group1: List[float], group2: List[float], num_comparisons: int = 1) -> Dict[str, float]:
     """
-    Computes the p-value for a Paired T-Test.
+    Computes the p-value for a Paired T-Test with Bonferroni correction.
     Ideal for seed-matched Monte Carlo trials.
     """
     if len(group1) != len(group2) or len(group1) < 2:
-        return 1.0
+        return {"p_value": 1.0, "p_value_corrected": 1.0}
         
     n = len(group1)
     diffs = [group1[i] - group2[i] for i in range(n)]
@@ -99,12 +99,38 @@ def compute_paired_t_test(group1: List[float], group2: List[float]) -> float:
     std_diff = compute_std(diffs, mean_diff)
     
     if std_diff == 0:
-        return 1.0 if mean_diff == 0 else 0.0
-        
-    t_stat = abs(mean_diff) / (std_diff / math.sqrt(n))
-    df = n - 1
+        p_val = 1.0 if mean_diff == 0 else 0.0
+    else:
+        t_stat = abs(mean_diff) / (std_diff / math.sqrt(n))
+        df = n - 1
+        p_val = t_cdf(t_stat, df)
     
-    return t_cdf(t_stat, df)
+    # Bonferroni correction: p_corr = p * m
+    p_corr = min(1.0, p_val * num_comparisons)
+    
+    return {
+        "p_value": p_val,
+        "p_value_corrected": p_corr
+    }
+
+def compute_paired_cohens_d(group1: List[float], group2: List[float]) -> float:
+    """
+    Measures the effect size for paired samples (Cohen's d_z).
+    Calculated as Mean(Diff) / SD(Diff).
+    """
+    if len(group1) != len(group2) or len(group1) < 2:
+        return 0.0
+        
+    n = len(group1)
+    diffs = [group1[i] - group2[i] for i in range(n)]
+    
+    mean_diff = sum(diffs) / n
+    std_diff = compute_std(diffs, mean_diff)
+    
+    if std_diff == 0:
+        return 0.0
+        
+    return mean_diff / std_diff
 
 def compute_cohens_d(group1: List[float], group2: List[float]) -> float:
     """Measures the effect size between two groups."""

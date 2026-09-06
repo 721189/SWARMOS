@@ -22,22 +22,24 @@ def run_ablation_study():
     
     for cfg in configs:
         for seed in seeds:
-            # Full SWARMOS
+            # P0: Real component ablation variants
             full = run_single_baseline_trial(
                 cfg["fleet_size"], cfg["task_count"], cfg["scen"], 350.0, cfg["p_loss"], seed, "SWARMOS"
             )
-            
-            # CBBA Recovery (Ablated Anomaly/Safety)
-            recovery = run_single_baseline_trial(
-                cfg["fleet_size"], cfg["task_count"], cfg["scen"], 350.0, cfg["p_loss"], seed, "CBBA_Recovery"
+            no_filter = run_single_baseline_trial(
+                cfg["fleet_size"], cfg["task_count"], cfg["scen"], 350.0, cfg["p_loss"], seed, "SWARMOS_NoFilter"
             )
-            
-            # CBBA Standard (Ablated Recovery/Anomaly/Safety)
+            no_compiler = run_single_baseline_trial(
+                cfg["fleet_size"], cfg["task_count"], cfg["scen"], 350.0, cfg["p_loss"], seed, "SWARMOS_NoCompiler"
+            )
+            no_recovery = run_single_baseline_trial(
+                cfg["fleet_size"], cfg["task_count"], cfg["scen"], 350.0, cfg["p_loss"], seed, "SWARMOS_NoRecovery"
+            )
             standard = run_single_baseline_trial(
                 cfg["fleet_size"], cfg["task_count"], cfg["scen"], 350.0, cfg["p_loss"], seed, "CBBA_Standard"
             )
             
-            results.extend([full, recovery, standard])
+            results.extend([full, no_filter, no_compiler, no_recovery, standard])
             
     # Save to dedicated ablation results
     with open("swarmos/research/ablation_results.json", "w") as f:

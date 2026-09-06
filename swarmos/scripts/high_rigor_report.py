@@ -78,16 +78,22 @@ def generate_rigorous_report(results_path="nebius_experiment_results.json"):
             if a not in algo_groups: algo_groups[a] = []
             algo_groups[a].append(r["mission_completion"])
         
-        # Calculate impacts
+        # Calculate impacts using explicit ablation variants (P0)
         swarmos_mean = sum(algo_groups.get("SWARMOS", [0])) / max(1, len(algo_groups.get("SWARMOS", [])))
-        recovery_mean = sum(algo_groups.get("CBBA_Recovery", [0])) / max(1, len(algo_groups.get("CBBA_Recovery", [])))
+        no_filter_mean = sum(algo_groups.get("SWARMOS_NoFilter", [0])) / max(1, len(algo_groups.get("SWARMOS_NoFilter", [])))
+        no_compiler_mean = sum(algo_groups.get("SWARMOS_NoCompiler", [0])) / max(1, len(algo_groups.get("SWARMOS_NoCompiler", [])))
+        no_recovery_mean = sum(algo_groups.get("SWARMOS_NoRecovery", [0])) / max(1, len(algo_groups.get("SWARMOS_NoRecovery", [])))
         standard_mean = sum(algo_groups.get("CBBA_Standard", [0])) / max(1, len(algo_groups.get("CBBA_Standard", [])))
         
-        recovery_impact = recovery_mean - standard_mean
-        full_impact = swarmos_mean - standard_mean
+        # Impact isolation
+        filter_impact = swarmos_mean - no_filter_mean
+        compiler_impact = swarmos_mean - no_compiler_mean
+        recovery_impact = swarmos_mean - no_recovery_mean
         
-        report_lines.append(f"\n*   **Recovery Module Impact**: Responsible for a **+{recovery_impact:.1f}%** increase in Task Completion Rate (TCR) across tested scenarios.")
-        report_lines.append(f"*   **Full SWARMOS Resilience**: The integrated stack (Anomaly Filter + Safety Compiler + Recovery) provides a total of **+{full_impact:.1f}%** resilience gain over Standard CBBA.")
+        report_lines.append(f"\n*   **Anomaly Filter Impact**: Contributes a **+{filter_impact:.1f}%** marginal TCR gain by isolating malicious/malfunctioning nodes.")
+        report_lines.append(f"*   **Safety Compiler Impact**: Contributes a **+{compiler_impact:.1f}%** TCR gain by ensuring valid mission manifests before deployment.")
+        report_lines.append(f"*   **Recovery Module Impact**: Contributes a **+{recovery_impact:.1f}%** TCR gain through deterministic re-allocation of orphaned tasks.")
+        report_lines.append(f"*   **Cumulative Resilience**: SWARMOS provides a total of **+{(swarmos_mean - standard_mean):.1f}%** TCR improvement over baseline CBBA.")
         
         # Anomaly filtering specific check
         adv_trials = [r for r in abl_data if r.get("failure_mode") == "adversarial_nodes"]

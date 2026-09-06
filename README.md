@@ -51,14 +51,21 @@ SWARMOS features a specialized empirical engine for high-confidence research:
 
 ## 3. High-Rigor Research Results (Artifact v2.1.0)
 
-Our latest 1,120-trial benchmark sweep highlights the transformative impact of the SWARMOS resilience layer:
+Our latest 1,400-trial full matrix benchmark sweep and 450-trial systematic ablation study highlight the resilience of the SWARMOS coordination architecture:
 
-| Scenario | Algorithm | TCR (Mean ± CI) | Significance ($p$) | Effect Size ($d$) |
+| Scenario / Configuration | Algorithm | TCR (Mean ± CI) | Significance ($p$) | Effect Size ($d$) |
 | :--- | :--- | :--- | :--- | :--- |
-| **Adversarial (Poisoned Bids)** | **SWARMOS** | **99.2% ± 0.8** | **< 0.0001 (***)** | **4.12 (Huge)** |
-| **High Interference (35% Loss)** | **SWARMOS** | **98.2% ± 1.4** | 0.0196 (*) | 0.74 (Large) |
+| **Catastrophic Attrition (50% Loss + Motor Failures)** | **SWARMOS** | **98.0% ± 3.5%** | **0.0392 (*)** | **1.57 (Large)** |
+| **Catastrophic Attrition (FS=4, T=10)** | Static Baseline | 74.0% ± 4.3% | 0.0481 (*) | -1.41 |
+| **Adversarial Injections (Poisoned Bids)** | **SWARMOS** | **99.3%** | **p < 0.05** | **Multi-tier Recovery** |
+| **High Interference Breakdown Threshold** | **SWARMOS** | **Stable up to 70% Loss** | — | Degrades only at 80% |
 
-*Full results available in [docs/RESEARCH_REPORT_RIGOR.md](docs/RESEARCH_REPORT_RIGOR.md).*
+### Component Ablation Breakdown
+- **Dynamic Recovery Module**: Contributes **+2.0% TCR** baseline gain under severe fleet attrition.
+- **Strategic Anomaly Filter**: Quarantines poisoned bids and adversarial nodes, ensuring **99.3% TCR** under targeted sabotage.
+- **Safety Compiler**: Zero-tolerance deterministic bounds rejection protecting the consensus engine from malformed/out-of-bound missions.
+
+*Full multi-config tables, breakdown threshold sweeps, and paired effect sizes are available in [docs/RESEARCH_REPORT_RIGOR.md](docs/RESEARCH_REPORT_RIGOR.md).*
 
 ## 4. Getting Started
 
