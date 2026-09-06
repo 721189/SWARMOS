@@ -17,6 +17,7 @@ import os
 import random
 import time
 import math
+from datetime import datetime, timezone
 from typing import Dict, List, Any, Tuple
 
 from swarmos.utils.config import SwarmConfig
@@ -29,6 +30,8 @@ from swarmos.swarm_engine.anomaly_cbba import StrategicAnomalyFilter, StrategicA
 from swarmos.swarm_engine.failures import FailureInjector
 from swarmos.swarm_engine.metrics import SwarmMetricsTracker
 from swarmos.ai_layer.safety_compiler import SafetyCompiler
+
+ARTIFACT_SCHEMA_VERSION = "2.1.0"
 
 def generate_deterministic_tasks(
     task_count: int,
@@ -376,6 +379,7 @@ def run_single_baseline_trial(
     
     return {
         "run_id": f"RUN-{seed}-{algorithm}-{int(time.time())}",
+        "artifact_version": ARTIFACT_SCHEMA_VERSION,
         "config_hash": config_hash,
         "seed": seed,
         "algorithm": algorithm,
@@ -384,6 +388,7 @@ def run_single_baseline_trial(
         "failure_mode": failure_mode,
         "communication_range": comm_range,
         "packet_loss": packet_loss_rate,
+        "audit_timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "sim_time_sec": round(total_sim_time, 1),
         "mission_completion": round(actual_completion_pct, 1),
         "mean_convergence_ms": round(initial_consensus_ms, 2),
@@ -506,7 +511,8 @@ def run_experiment_matrix(
     total_individual_trials = sum(r.get("trials", 1) for r in results)
 
     output_payload = {
-        "timestamp": time.time(),
+        "audit_timestamp": datetime.now(timezone.utc).isoformat(),
+        "artifact_version": ARTIFACT_SCHEMA_VERSION,
         "benchmark_mode": benchmark_mode,
         "total_configurations": total_configs,
         "total_trials": total_individual_trials,

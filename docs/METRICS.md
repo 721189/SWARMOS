@@ -47,14 +47,24 @@ This document formalizes the canonical metrics used to evaluate SWARMOS against 
 *   **Communication Overhead**
     *   *Definition*: The total number of bytes transmitted during the consensus phase.
     *   *Interpretation*: Lower is better. High overhead may exceed available bandwidth in degraded RF environments.
-*   **Mean Latency**
-    *   *Definition*: The average propagation delay for consensus packets.
+*   **Network Invariants (Conservation of Flow)**
+    *   *Definition*: A physical invariant where total delivered packets must be less than or equal to total generated packets.
+    *   *Equation*: $N_{delivered} \le N_{generated}$
+    *   *Interpretation*: Failure of this invariant indicates a leak in the simulation's network abstraction or non-deterministic packet injection.
 
 ## 5. Security & Strategic Anomaly Detection
 
 *   **Detection Rate (True Positive Rate)**
     *   *Definition*: The percentage of malicious/anomalous bids successfully flagged and rejected by the Strategic-Grade Anomaly-Aware Filter.
+*   **Poisoned Bid Block Rate**
+    *   *Definition*: Count of bids that exceeded physical reward bounds (base\_reward * 1.25) and were successfully neutralized.
+*   **Kinematic Spoof Block Rate**
+    *   *Definition*: Count of telemetry updates where the implied velocity exceeded physical hardware limits ($v_{max}$) and were successfully rejected.
 *   **False Positive Rate (FPR)**
     *   *Definition*: The percentage of legitimate, honest bids incorrectly flagged as anomalous due to aggressive kinematic bounds checking or stale state.
 *   **Quarantine Latency**
     *   *Definition*: Time elapsed from an anomalous node's first malicious action to the moment its trust score drops below the quarantine threshold, isolating it.
+
+## 6. Artifact Versioning
+
+All experiment results are tagged with a **Schema Version** (e.g., `2.1.0`) to ensure backward compatibility with visualization and analysis tools. Changes to the metric output structure require a major version bump.
