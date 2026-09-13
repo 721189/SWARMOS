@@ -565,12 +565,15 @@ def run_experiment_matrix(
                             "packets_dropped_mean": round(mean_drop, 1),
                             "observed_packet_loss_pct": round(mean_loss, 1),
                             "trials": len(trial_metrics),
-                            "_raw_comp_rates": comp_rates # Hidden field for significance
+                            "_raw_mission_completion": comp_rates,
+                            "_raw_mean_convergence_ms": conv_times,
+                            "_raw_observed_packet_loss_pct": loss_rates
                         })
 
-    # Post-process for Statistical Significance
+    # Post-process for Statistical Significance (Phase 19)
     baseline_algo = "CBBA_Standard"
     num_algos = len(algorithms) - 1 # m for Bonferroni
+    audit_metrics = ["mission_completion", "mean_convergence_ms", "observed_packet_loss_pct"]
     
     for res in results:
         if res["algorithm"] == baseline_algo: continue
@@ -580,20 +583,28 @@ def run_experiment_matrix(
                              (r["fleet_size"], r["task_count"], r["failure_mode"], r["communication_range"]) == config_key), None)
         
         if baseline_res:
-            group_a = res["_raw_comp_rates"]
-            group_b = baseline_res["_raw_comp_rates"]
-            
-            # P1: Paired T-Test with Bonferroni correction and Paired Cohen's d
-            stats_res = compute_paired_t_test(group_a, group_b, num_comparisons=num_algos)
-            res["p_value_vs_baseline"] = stats_res["p_value"]
-            res["p_value_corrected"] = stats_res["p_value_corrected"]
-            res["cohens_d_vs_baseline"] = compute_paired_cohens_d(group_a, group_b)
-            res["significance_stars"] = get_significance_stars(res["p_value_corrected"])
+            res["significance_report"] = {}
+            for metric in audit_metrics:
+                raw_field = f"_raw_{metric}"
+                if raw_field in res and raw_field in baseline_res:
+                    group_a = res[raw_field]
+                    group_b = baseline_res[raw_field]
+                    
+                    # Paired T-Test with Bonferroni correction
+                    stats_res = compute_paired_t_test(group_a, group_b, num_comparisons=num_algos)
+                    d = compute_paired_cohens_d(group_a, group_b)
+                    
+                    res["significance_report"][metric] = {
+                        "p_val_corr": round(stats_res["p_value_corrected"], 5),
+                        "cohens_d": round(d, 2),
+                        "stars": get_significance_stars(stats_res["p_value_corrected"])
+                    }
 
     # Remove raw data before final serialization
     for res in results:
-        if "_raw_comp_rates" in res:
-            del res["_raw_comp_rates"]
+        for k in list(res.keys()):
+            if k.startswith("_raw_"):
+                del res[k]
 
     total_configs = len(results)
     total_individual_trials = sum(r.get("trials", 1) for r in results)
