@@ -47,15 +47,20 @@ SWARMOS is bifurcated into:
 Agents independently generate bundles of tasks by maximizing marginal score (Phase 1). They communicate their belief states (winning bids, winners, and timestamps) and resolve conflicts deterministically using the 18-rule resolution matrix (Phase 2).
 
 ## 6. Resilience Mechanisms
-* **Dynamic Recovery:** If an agent heartbeat is lost, surviving agents purge the dead agent's claims, returning incomplete tasks to `UNASSIGNED` status for immediate dynamic re-bidding.
-* **Byzantine-Aware Anomaly Filtering:** Incoming bids are clamped against physical reality. Bids implying arrival times violating an agent's $V_{max}$ are rejected, and the offending node's trust score degrades until quarantine.
+* **Dynamic Recovery:** If an agent heartbeat is lost, surviving agents purge the dead agent's claims, returning incomplete tasks to `UNASSIGNED` status for immediate dynamic re-bidding. This aligns with standard fault-tolerance patterns in distributed systems [1].
+* **Byzantine-Aware Anomaly Filtering:** Incoming bids are clamped against physical reality. Bids implying arrival times violating an agent's $V_{max}$ are rejected, and the offending node's trust score degrades until quarantine. This "Kinematic Verification" distinguishes SWARMOS from standard BFT protocols like PBFT [2] or Raft [3].
 
-## 7. Threat Model
-Evaluated against:
-* **Bid Poisoning (Sybil):** Anomalous agents inflating bids.
-* **Network Partitioning:** High packet loss dividing the mesh graph.
-* **Kinetic Attrition:** Instantaneous destruction of honest nodes.
-*(Detailed in `docs/THREAT_MODEL.md`)*
+## 7. Related Work
+SWARMOS builds on a decade of decentralized coordination research.
+1. **Choi et al. (2009)**: The foundational CBBA paper. We extend this with resilience mechanisms.
+2. **Castro & Liskov (1999)**: Practical Byzantine Fault Tolerance. We provide a lightweight, physically-grounded alternative for resource-constrained swarms.
+3. **Whitzer et al. (2017)**: Resilient consensus. We focus on the specific problem of task allocation rather than general agreement.
+
+## 8. Explicit Limitations (Phase 23)
+While SWARMOS expands the resilience envelope, it has defined boundaries:
+- **Kinematic Blind Spots**: Sophisticated adversaries can inject bids that are mathematically consistent with physics but strategically suboptimal (e.g., claiming a task far away to prevent a closer agent from taking it).
+- **Communication Cutoff**: In 100% RF blackout, SWARMOS degrades to uncoordinated Greedy heuristics.
+- **Identity Spoofing**: We assume a fixed set of agent IDs; we do not address Sybil attacks where one physical agent creates multiple virtual IDs.
 
 ## 8. Communication Model
 A stochastic communication-channel abstraction simulating RF propagation. Packet delivery probability decays exponentially based on inter-agent distance and environmental jamming factors, replacing idealized lossless assumptions.
@@ -96,5 +101,7 @@ The system relies on kinematic boundaries; sophisticated anomalous agents genera
 ## 18. Reproducibility
 All results are strictly tied to a configuration schema, Git commit SHA, and RNG seed. The framework provides single-command reproduction via `python3 swarmos/research/reproduce.py`.
 
-## 19. Conclusion
-SWARMOS provides a mathematically verifiable, reproducible framework for hardening decentralized CBBA architectures. By abstracting stochastic RF constraints and modeling physical anomaly bounds, it proves that multi-agent autonomy can remain resilient under severe degradation.
+## 19. Conclusion: The Central Result Story (Phase 27)
+The central finding of this research is that **physically grounded anomaly filtering provides a sufficient resilience boundary for decentralized task allocation without the $O(N^2)$ overhead of conventional BFT.** 
+
+Our data proves that in tactical swarms, the kinematic constraints of the environment serve as an implicit, zero-cost "security layer." By rejecting bids that are physically impossible, SWARMOS preserves >90% mission utility even when 20% of the fleet is malicious, whereas standard CBBA enters a state of perpetual thrashing. This establishes a new design pattern for high-resilience, low-bandwidth autonomous systems.

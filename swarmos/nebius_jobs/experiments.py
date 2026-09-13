@@ -79,7 +79,9 @@ def run_single_baseline_trial(
     packet_loss_rate: float,
     seed: int,
     algorithm: str = "SWARMOS",
-    isolation_mode: bool = False
+    isolation_mode: bool = False,
+    obstacle_count: int = 2,
+    threat_intensity: float = 1.0
 ) -> Dict[str, Any]:
     """
     Executes a single simulation trial. 
@@ -113,8 +115,11 @@ def run_single_baseline_trial(
         agents[agent_id] = agent
 
     # 3. Add Obstacles & Threat Zones
-    env.add_obstacle(Obstacle("OBS_1", 380, 240, 110, 160, "BUILDING"))
-    env.add_obstacle(Obstacle("OBS_2", 690, 380, 130, 130, "BUILDING"))
+    for i in range(obstacle_count):
+        env.add_obstacle(Obstacle(f"OBS_{i}", 300 + (i*150), 240 + (i*50), 100, 100, "BUILDING"))
+    
+    if threat_intensity > 0:
+        env.add_threat(ThreatZone("THREAT_1", (600.0, 400.0), 200.0, "RF_JAMMER", intensity=threat_intensity))
 
     # 4. Generate Deterministic Tasks
     tasks_list = generate_deterministic_tasks(task_count, seed)
@@ -152,7 +157,23 @@ def run_single_baseline_trial(
                 for t_id in list(tasks.keys()):
                     agents[adv_id].winning_bids[t_id] = 0.1
                     agents[adv_id].winning_agents[t_id] = adv_id
-            # ... classes C, D, E would go here
+            elif attack_class == "C":
+                # Stale Replay (Inject old high bids)
+                for t_id in list(tasks.keys())[:3]:
+                    agents[adv_id].winning_bids[t_id] = 150.0
+                    agents[adv_id].winning_agents[t_id] = "DEAD_AGENT_99" # Spoofing a non-existent node
+                    agents[adv_id].timestamps["DEAD_AGENT_99"] = 9999.0 # High timestamp to force acceptance
+            elif attack_class == "D":
+                # Intermittent Poisoning (Wait until mission start)
+                # This is handled in the sim loop by checking the attack_class
+                pass
+            elif attack_class == "E":
+                # Coordinated Attack (Multiple nodes claim the same task cluster)
+                adv_nodes = list(agents.keys())[:2]
+                for aid in adv_nodes:
+                    for t_id in list(tasks.keys())[:5]:
+                        agents[aid].winning_bids[t_id] = 200.0
+                        agents[aid].winning_agents[t_id] = aid
 
     failure_injector = FailureInjector(env)
     metrics = SwarmMetricsTracker()
@@ -455,10 +476,12 @@ def run_experiment_matrix(
         with open(matrix_path, "r") as f:
             spec = json.load(f)
 
-    all_fleet_sizes = spec.get("parameter_sweep", {}).get("fleet_size", [4, 6, 8, 12, 16])
+    all_fleet_sizes = spec.get("parameter_sweep", {}).get("fleet_size", [4, 8, 16, 32, 64])
     all_task_densities = spec.get("parameter_sweep", {}).get("task_density", [5, 10, 15, 25])
     all_scenarios = spec.get("parameter_sweep", {}).get("failure_scenarios", [{"name": "nominal", "packet_loss_rate": 0.0}])
     all_comm_ranges = spec.get("parameter_sweep", {}).get("communication_ranges_m", [250.0, 350.0, 500.0])
+    all_obstacle_counts = spec.get("parameter_sweep", {}).get("obstacle_counts", [2])
+    all_threat_intensities = spec.get("parameter_sweep", {}).get("threat_intensities", [1.0])
     configured_trials = spec.get("trials_per_config", 3)
     algorithms = ["Static", "Greedy", "CBBA_Standard", "CBBA_Recovery", "CBBA_BFT", "CBBA_Recovery_BFT", "SWARMOS"]
 
