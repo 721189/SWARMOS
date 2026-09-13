@@ -215,7 +215,7 @@ def run_single_trial(
         "algorithm": baseline_id,
         "TCR": kpis["task_completion_pct"] / 100.0,
         "utility": u_actual,
-        "r_opt": u_actual / max(1.0, u_star),
+        "optimality_ratio": u_actual / max(1.0, u_star),
         "convergence_time": kpis["avg_consensus_ms"],
         "PDR": kpis["observed_packet_loss_pct"] / 100.0,
         "TPR": tp / max(1, n_attackers),
@@ -261,16 +261,20 @@ def run_authoritative_pipeline(spec_path: str = "PAPER_EXPERIMENT_SPEC.json"):
                 
                 for i, algo_name in enumerate(algos_to_test):
                     g2 = [r["TCR"] for r in trial_data[algo_name]]
+                    g_opt = [r["optimality_ratio"] for r in trial_data[algo_name]]
                     res_summary = trial_data[algo_name][0].copy()
                     res_summary["TCR"] = compute_mean(g2)
+                    res_summary["optimality_ratio"] = compute_mean(g_opt)
                     res_summary["p_val"] = p_values[i]
                     res_summary["p_val_holm"] = corrected_ps[i]
                     res_summary["prob_success_09"] = compute_mean([1.0 if t >= 0.9 else 0.0 for t in g2])
                     results.append(res_summary)
                 
                 g_pivot = [r["TCR"] for r in trial_data[pivot]]
+                g_pivot_opt = [r["optimality_ratio"] for r in trial_data[pivot]]
                 pivot_res = trial_data[pivot][0].copy()
                 pivot_res["TCR"] = compute_mean(g_pivot)
+                pivot_res["optimality_ratio"] = compute_mean(g_pivot_opt)
                 pivot_res["p_val"] = 1.0
                 pivot_res["p_val_holm"] = 1.0
                 pivot_res["prob_success_09"] = compute_mean([1.0 if t >= 0.9 else 0.0 for t in g_pivot])

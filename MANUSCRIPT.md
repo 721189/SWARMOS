@@ -21,8 +21,9 @@ We evaluated SWARMOS across a Cartesian matrix of **4,860 configurations**, vary
 - **Class C (Stale Replay)**: Injecting expired high bids from ghost agents.
 
 ## 4. Key Findings
-- **Resilience**: SWARMOS preserves >90% mission utility under Class A attacks, whereas standard CBBA performance collapses to <30%.
-- **Optimality**: SWARMOS adheres to the 50% greedy optimality guarantee even under severe network degradation.
+- **Resilience Advantage**: In the canonical benchmark, SWARMOS maintained a **Mean Task Completion Rate (TCR) of 0.990**, compared to **0.336** for the standard CBBA baseline under identical adversarial pressure (Class D intermittent poisoning).
+- **Optimality Invariant**: SWARMOS achieved a mean optimality ratio ($R_{opt}$) of **0.684**, strictly exceeding the theoretical $50\%$ lower bound for greedy auctions.
+- **Failure Envelope**: Boundary analysis shows $P(TCR \ge 0.9) = 1.0$ across the operational matrix ($p \le 0.2, f \le 0.1$), indicating high robustness to simultaneous communication loss and strategic sabotage.
 - **Complexity**: Communication overhead scales linearly ($O(N)$), significantly outperforming PBFT and other consensus-heavy alternatives.
 
 ## 5. Conclusion

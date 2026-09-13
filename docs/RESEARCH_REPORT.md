@@ -14,7 +14,11 @@ We benchmark SWARMOS against the B0-B5 baseline ladder:
 We inject a fraction $f \in \{0 \dots 0.5\}$ of attackers, where $n = \max(1, \text{round}(f \cdot N))$. 
 - **Class D**: Intermittent poisoning with 10s temporal cycles (Honest/Poison).
 
-## 3. Results (P1)
+## 3. Implementation Details
+### Kinematic Validation
+To prevent false-positive quarantines of high-speed honest agents, the kinematic filter enforces a $v_{max} = 100.0\,m/s$ physical threshold. This encompasses the nominal operating speed of $60.0\,m/s$ while allowing for $40\%$ stochastic variance in telemetry arrival intervals.
+
+## 4. Results (P1)
 Results are audited using pure-python implementations of the **Wilcoxon Signed-Rank Test** with **Holm-Bonferroni correction**.
 
 ### Resilience Boundary (Failure Envelope)

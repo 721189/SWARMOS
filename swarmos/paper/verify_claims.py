@@ -52,7 +52,7 @@ def verify_paper_claims(results_path: str = "results/canonical/results.json"):
         print(row)
 
     # 3. Claim 3: Optimality (P1)
-    opt_ratios = [r["r_opt"] for r in swarmos_runs if r.get("r_opt") is not None]
+    opt_ratios = [r["optimality_ratio"] for r in swarmos_runs if r.get("optimality_ratio") is not None]
     if opt_ratios:
         avg_opt = compute_mean(opt_ratios)
         print(f"\n[Claim 3] Optimality Invariant Check (Avg R_opt)")

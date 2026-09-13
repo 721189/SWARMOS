@@ -1,7 +1,7 @@
 {
   "reproducibility_package": {
-    "version": "3.0.0",
-    "timestamp": "2026-09-13T13:17:15Z",
+    "version": "4.0.0",
+    "timestamp": "2026-09-13T13:50:00Z",
     "status": "DEFINITIVE_ARCHIVE",
     "manifest_id": "DOI:10.XXXX/SWARMOS.2026",
     "environment": {

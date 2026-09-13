@@ -6,6 +6,37 @@ from swarmos.utils.logger import logger
 from swarmos.nebius_jobs.experiments import run_authoritative_pipeline
 from swarmos.paper.verify_claims import verify_paper_claims
 
+def generate_heatmap(data, p_rates, f_rates):
+    print("\n[Figure 1] Failure Envelope Heatmap: P(TCR >= 0.9)")
+    print("      f | " + " | ".join(f"{f:.2f}" for f in f_rates))
+    print("  p     |" + "-" * (len(f_rates) * 10))
+    
+    for p in p_rates:
+        row = f"  {p:.2f}  |"
+        for f in f_rates:
+            val = data.get((p, f), 0.0)
+            char = "█" if val >= 0.9 else "▓" if val >= 0.7 else "▒" if val >= 0.4 else "░" if val >= 0.1 else " "
+            row += f" {char} {val:.2f} |"
+        print(row)
+    print("\nLegend: █ >=0.9, ▓ >=0.7, ▒ >=0.4, ░ >=0.1\n")
+
+def generate_line_plot(data, p_rates):
+    print("[Figure 2] Performance Degradation: TCR vs Packet Loss (f=0.1)")
+    print("  TCR |")
+    for i in range(10, -1, -1):
+        y = i / 10.0
+        row = f"  {y:.1f} |"
+        for p in p_rates:
+            val = data.get(p, 0.0)
+            if abs(val - y) < 0.05:
+                row += "  *  "
+            else:
+                row += "     "
+        print(row)
+    print("      +" + "-----" * len(p_rates))
+    print("        " + " ".join(f"{p:.2f}" for p in p_rates))
+    print("              Packet Loss (p)\n")
+
 def run_canonical_pipeline():
     print("====================================================")
     print("   SWARMOS AUTHORITATIVE RESEARCH PIPELINE v4.0     ")
@@ -42,8 +73,16 @@ def run_canonical_pipeline():
 
     # 4. Generate Figures (P1)
     print("\n[*] Generating Scientific Figures...")
-    from swarmos.paper.generate_figures import main as generate_figs
-    generate_figs()
+    if os.path.exists(results_path):
+        with open(results_path, "r") as f:
+            full_data = json.load(f)
+        swarmos_runs = [r for r in full_data["configs"] if r["algorithm"] == "B5_SWARMOS"]
+        p_rates = sorted(list(set(r["packet_loss"] for r in swarmos_runs)))
+        f_rates = sorted(list(set(r["adversarial_fraction"] for r in swarmos_runs)))
+        heatmap_data = {(r["packet_loss"], r["adversarial_fraction"]): r["prob_success_09"] for r in swarmos_runs}
+        generate_heatmap(heatmap_data, p_rates, f_rates)
+        line_data = {r["packet_loss"]: r["TCR"] for r in swarmos_runs if r["adversarial_fraction"] == 0.1}
+        generate_line_plot(line_data, p_rates)
 
     print("\n[✓] CANONICAL PIPELINE EXECUTION COMPLETE.")
     print("====================================================")

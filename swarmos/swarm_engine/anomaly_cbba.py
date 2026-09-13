@@ -20,7 +20,7 @@ class StrategicAnomalyFilter:
     Provides heuristic anomaly detection and threshold-based isolation of deviant nodes.
     """
 
-    def __init__(self, total_agents: int = 6, max_velocity_mps: float = 25.0):
+    def __init__(self, total_agents: int = 6, max_velocity_mps: float = 100.0):
         self.total_agents = total_agents
         self.max_velocity_mps = max_velocity_mps
         self.max_tolerated_anomalies = (total_agents - 1) // 3
