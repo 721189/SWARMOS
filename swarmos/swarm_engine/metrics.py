@@ -62,6 +62,7 @@ class SwarmMetricsTracker:
         failed_count = sum(1 for a in agents.values() if not a.health.is_operational())
 
         total_msgs = env.packets_delivered if env is not None and hasattr(env, "packets_delivered") else sum(a.messages_sent for a in agents.values())
+        total_bytes = env.bytes_transmitted if env is not None and hasattr(env, "bytes_transmitted") else total_msgs * 256
         total_batt = sum(a.health.battery for a in agents.values()) / max(1, len(agents))
         reward_earned = sum(t.base_reward for t in tasks.values() if t.status == TaskStatus.COMPLETED)
         # Dynamic calculation of theoretical max (Centralized Greedy Baseline)
@@ -96,6 +97,11 @@ class SwarmMetricsTracker:
         completed = sum(1 for t in tasks.values() if t.status == TaskStatus.COMPLETED)
         failed = sum(1 for t in tasks.values() if t.status == TaskStatus.FAILED)
         unassigned = sum(1 for t in tasks.values() if t.status == TaskStatus.UNASSIGNED)
+
+        reward_earned = sum(t.base_reward for t in tasks.values() if t.status == TaskStatus.COMPLETED)
+        from swarmos.reference_cbba.centralized_solver import CentralizedSolver
+        solver = CentralizedSolver()
+        theoretical_max = solver.solve_greedy(agents, tasks)
 
         avg_consensus_ms = (
             sum(self.consensus_durations) / len(self.consensus_durations)
@@ -142,5 +148,7 @@ class SwarmMetricsTracker:
             "packets_delivered": packets_deliv,
             "packets_dropped": packets_drop,
             "observed_packet_loss_pct": round(observed_drop_rate, 1),
+            "comm_overhead_kb_per_agent": round((env.bytes_transmitted / max(1, len(agents))) / 1024.0, 2) if env else 0.0,
+            "msgs_per_task": round(packets_deliv / max(1, completed), 2),
             "network_invariant_pass": network_consistency
         }

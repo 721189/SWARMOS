@@ -78,11 +78,12 @@ def run_single_baseline_trial(
     comm_range: float,
     packet_loss_rate: float,
     seed: int,
-    algorithm: str = "SWARMOS"
+    algorithm: str = "SWARMOS",
+    isolation_mode: bool = False
 ) -> Dict[str, Any]:
     """
-    Executes a single simulation trial using the requested baseline algorithm
-    under identical initial conditions, deterministic tasks, and failure injection schedules.
+    Executes a single simulation trial. 
+    If isolation_mode is True, agents do not move; we evaluate purely the allocation convergence.
     """
     rng = random.Random(seed)
     
@@ -246,7 +247,7 @@ def run_single_baseline_trial(
 
     while total_sim_time < max_duration:
         total_sim_time += dt
-        env.step(dt)
+        env.step(dt, isolation_mode=isolation_mode)
 
         # Integrate telemetry anomaly detection into simulation loop
         # P0: Real detection logic that leads to quarantine

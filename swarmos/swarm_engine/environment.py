@@ -146,7 +146,7 @@ class SwarmEnvironment:
                     
         return self.communication_links
 
-    def step(self, dt: float) -> None:
+    def step(self, dt: float, isolation_mode: bool = False) -> None:
         """Advance physical simulation by dt seconds."""
         self.elapsed_time += dt
         
@@ -169,8 +169,14 @@ class SwarmEnvironment:
                 agent.health.comms_transceiver = min(1.0, agent.health.comms_transceiver + (0.2 * dt))
 
         # 2. Kinematic updates
-        for agent in self.agents.values():
-            agent.update_kinematics(dt)
+        if not isolation_mode:
+            for agent in self.agents.values():
+                agent.update_kinematics(dt)
+        else:
+            # In isolation mode, agents "teleport" to simulate instant motion if they have a target
+            for agent in self.agents.values():
+                if agent.status == AgentStatus.TRAVERSING and agent.target_position:
+                    agent.position = list(agent.target_position)
 
         # 3. Refresh network topology
         self.update_mesh_network()
