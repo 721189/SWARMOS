@@ -26,6 +26,7 @@ class StrategicAnomalyFilter:
         self.max_tolerated_anomalies = (total_agents - 1) // 3
         self.trust_scores: Dict[str, float] = {}
         self.agent_statuses: Dict[str, str] = {}
+        self.quarantine: set = set()
         self.violation_history: Dict[str, List[str]] = {}
         self.last_reported_poses: Dict[str, Tuple[float, float, float]] = {} 
         self.detection_metrics = {
@@ -100,6 +101,7 @@ class StrategicAnomalyFilter:
 
         if new_trust <= 35.0:
             self.agent_statuses[agent_id] = StrategicAnomalyStatus.QUARANTINED
+            self.quarantine.add(agent_id)
             print(f"[Anomaly Filter-CONSENSUS] ⚠ AGENT {agent_id} QUARANTINED! Trust={new_trust}%. Reason: {reason}")
         elif new_trust <= 65.0:
             self.agent_statuses[agent_id] = StrategicAnomalyStatus.SUSPECT

@@ -1,4 +1,3 @@
-
 import math
 from typing import List, Dict, Any, Tuple
 
@@ -8,168 +7,81 @@ def compute_mean(data: List[float]) -> float:
 
 def compute_std(data: List[float], mean: float = None) -> float:
     if len(data) < 2: return 0.0
-    if mean is None:
-        mean = compute_mean(data)
+    if mean is None: mean = compute_mean(data)
     variance = sum((x - mean) ** 2 for x in data) / (len(data) - 1)
     return math.sqrt(variance)
 
+def erf(x: float) -> float:
+    """Error function approximation."""
+    # constants
+    a1 =  0.254829592
+    a2 = -0.284496736
+    a3 =  1.421413741
+    a4 = -1.453152027
+    a5 =  1.061405429
+    p  =  0.3275911
 
-def t_cdf(t: float, df: int) -> float:
-    """
-    Approximation of the Student's t-distribution Cumulative Distribution Function.
-    Using the Peizer-Pratt approximation which is very accurate for df > 1.
-    """
-    if df <= 0: return 0.5
-    
-    # Absolute t
-    abs_t = abs(t)
-    
-    # For very large df, t-distribution converges to Normal
-    if df > 100:
-        return 0.5 * (1.0 + math.erf(t / math.sqrt(2.0)))
+    # Save the sign of x
+    sign = 1
+    if x < 0: sign = -1
+    x = abs(x)
 
-    # A simple but decent approximation for the p-value of a t-distribution
-    # Reference: "A simple approximation for the area under the t-distribution"
-    x = df / (df + abs_t**2)
-    
-    # This is a rough but useful approximation for p-values in a research context without scipy
-    # For df=19 (n=20), this is quite reliable.
-    # We use a standard Normal approximation with a correction factor
-    z = (1.0 - 1.0/(4.0*df)) * abs_t / math.sqrt(1.0 + abs_t**2/(2.0*df))
-    p = 0.5 * math.erfc(z / math.sqrt(2.0))
-    
-    # Result is 2-tailed p-value
-    return 2.0 * p
+    # A&S formula 7.1.26
+    t = 1.0/(1.0 + p*x)
+    y = 1.0 - (((((a5*t + a4)*t) + a3)*t + a2)*t + a1)*t*math.exp(-x*x)
+    return sign*y
 
-def compute_stats(data: List[float]) -> Dict[str, float]:
-    """Computes mean, std, and 95% confidence interval using Student-t distribution."""
-    n = len(data)
-    if n == 0: return {"mean": 0, "std": 0, "ci_95": 0}
-    
-    mean = compute_mean(data)
-    if n < 2: return {"mean": mean, "std": 0, "ci_95": 0}
-    
-    std = compute_std(data, mean)
-    se = std / math.sqrt(n)
-    
-    # 95% Confidence Interval critical values for t-distribution (alpha=0.05, 2-tailed)
-    # Lookup table for common n in Monte Carlo (n=10 to 50)
-    t_critical_table = {
-        5: 2.571, 10: 2.228, 15: 2.131, 20: 2.086, 25: 2.064, 30: 2.042, 40: 2.021, 50: 2.009
-    }
-    
-    # Linear interpolation for critical t
-    df = n - 1
-    if df in t_critical_table:
-        t_crit = t_critical_table[df]
-    elif df > 50:
-        t_crit = 1.96 # Converges to Z
-    else:
-        # Simple floor/ceil interpolation
-        keys = sorted(t_critical_table.keys())
-        lower = max([k for k in keys if k <= df] or [5])
-        upper = min([k for k in keys if k >= df] or [50])
-        if lower == upper:
-            t_crit = t_critical_table[lower]
-        else:
-            v_low, v_high = t_critical_table[lower], t_critical_table[upper]
-            t_crit = v_low + (v_high - v_low) * (df - lower) / (upper - lower)
-            
-    ci_95 = t_crit * se
-    
-    return {
-        "mean": mean,
-        "std": std,
-        "ci_95": ci_95,
-        "n": n
-    }
+def normal_cdf(x: float) -> float:
+    return 0.5 * (1.0 + erf(x / math.sqrt(2.0)))
 
-def compute_paired_t_test(group1: List[float], group2: List[float], num_comparisons: int = 1) -> Dict[str, float]:
-    """
-    Computes the p-value for a Paired T-Test with Bonferroni correction.
-    Ideal for seed-matched Monte Carlo trials.
-    """
-    if len(group1) != len(group2) or len(group1) < 2:
-        return {"p_value": 1.0, "p_value_corrected": 1.0}
-        
-    n = len(group1)
-    diffs = [group1[i] - group2[i] for i in range(n)]
-    
+def t_test_paired(g1: List[float], g2: List[float]) -> Tuple[float, float]:
+    """Paired T-test (Pure Python)."""
+    n = len(g1)
+    if n < 2: return 0.0, 1.0
+    diffs = [g1[i] - g2[i] for i in range(n)]
     mean_diff = sum(diffs) / n
     std_diff = compute_std(diffs, mean_diff)
-    
-    if std_diff == 0:
-        p_val = 1.0 if mean_diff == 0 else 0.0
-    else:
-        t_stat = abs(mean_diff) / (std_diff / math.sqrt(n))
-        df = n - 1
-        p_val = t_cdf(t_stat, df)
-    
-    # Bonferroni correction: p_corr = p * m
-    p_corr = min(1.0, p_val * num_comparisons)
-    
-    return {
-        "p_value": p_val,
-        "p_value_corrected": p_corr
-    }
+    if std_diff == 0: return 0.0, (1.0 if mean_diff == 0 else 0.0)
+    t_stat = mean_diff / (std_diff / math.sqrt(n))
+    # Approximation of p-value for large-ish n using Normal
+    p_val = 2 * (1 - normal_cdf(abs(t_stat)))
+    return t_stat, p_val
 
-def compute_paired_cohens_d(group1: List[float], group2: List[float]) -> float:
-    """
-    Measures the effect size for paired samples (Cohen's d_z).
-    Calculated as Mean(Diff) / SD(Diff).
-    """
-    if len(group1) != len(group2) or len(group1) < 2:
-        return 0.0
-        
-    n = len(group1)
-    diffs = [group1[i] - group2[i] for i in range(n)]
+def wilcoxon_signed_rank(g1: List[float], g2: List[float]) -> Tuple[float, float]:
+    """Wilcoxon Signed-Rank Test (Pure Python)."""
+    n = len(g1)
+    diffs = [g1[i] - g2[i] for i in range(n) if g1[i] != g2[i]]
+    n_nonzero = len(diffs)
+    if n_nonzero < 5: return 0.0, 1.0
     
-    mean_diff = sum(diffs) / n
-    std_diff = compute_std(diffs, mean_diff)
+    abs_diffs = [abs(d) for d in diffs]
+    # Rank them
+    sorted_abs = sorted(enumerate(abs_diffs), key=lambda x: x[1])
+    ranks = [0] * n_nonzero
+    for i, (original_idx, val) in enumerate(sorted_abs):
+        ranks[original_idx] = i + 1
     
-    if std_diff == 0:
-        return 0.0
-        
-    return mean_diff / std_diff
+    w_pos = sum(ranks[i] for i, d in enumerate(diffs) if d > 0)
+    w_neg = sum(ranks[i] for i, d in enumerate(diffs) if d < 0)
+    w_stat = min(w_pos, w_neg)
+    
+    # Normal approximation
+    mu_w = n_nonzero * (n_nonzero + 1) / 4
+    sigma_w = math.sqrt(n_nonzero * (n_nonzero + 1) * (2 * n_nonzero + 1) / 24)
+    z = (w_stat - mu_w) / sigma_w
+    p_val = 2 * normal_cdf(z) # z is usually negative
+    return w_stat, p_val
 
-def compute_cohens_d(group1: List[float], group2: List[float]) -> float:
-    """Measures the effect size between two groups."""
-    n1, n2 = len(group1), len(group2)
-    if n1 < 2 or n2 < 2: return 0.0
-    
-    m1, m2 = compute_mean(group1), compute_mean(group2)
-    s1, s2 = compute_std(group1, m1), compute_std(group2, m2)
-    
-    # Pooled Standard Deviation
-    pooled_std = math.sqrt(((n1 - 1) * s1**2 + (n2 - 1) * s2**2) / (n1 + n2 - 2))
-    if pooled_std == 0: return 0.0
-    
-    return (m1 - m2) / pooled_std
-
-def compute_t_test_p_value(group1: List[float], group2: List[float]) -> float:
-    """
-    Approximates p-value for Welch's T-Test (unequal variances).
-    Using a normal distribution approximation for large N.
-    """
-    n1, n2 = len(group1), len(group2)
-    if n1 < 2 or n2 < 2: return 1.0
-    
-    m1, m2 = compute_mean(group1), compute_mean(group2)
-    s1, s2 = compute_std(group1, m1), compute_std(group2, m2)
-    
-    # Welch's T-Statistic
-    se = math.sqrt((s1**2 / n1) + (s2**2 / n2))
-    if se == 0: return 1.0 if m1 == m2 else 0.0
-    
-    t_stat = abs(m1 - m2) / se
-    
-    # Simple Gaussian approximation for p-value (valid for N > 30)
-    # p = 2 * (1 - cdf(|t|))
-    p_val = math.erfc(t_stat / math.sqrt(2))
-    return p_val
-
-def get_significance_stars(p_val: float) -> str:
-    if p_val < 0.001: return "***"
-    if p_val < 0.01: return "**"
-    if p_val < 0.05: return "*"
-    return "ns"
+def holm_correction(p_values: List[float]) -> List[float]:
+    """Holm-Bonferroni correction."""
+    m = len(p_values)
+    indexed_p = sorted(enumerate(p_values), key=lambda x: x[1])
+    corrected = [0.0] * m
+    for i, (original_idx, p) in enumerate(indexed_p):
+        corrected[original_idx] = min(1.0, p * (m - i))
+    # Ensure monotonicity
+    for i in range(1, m):
+        idx_curr = indexed_p[i][0]
+        idx_prev = indexed_p[i-1][0]
+        corrected[idx_curr] = max(corrected[idx_curr], corrected[idx_prev])
+    return corrected

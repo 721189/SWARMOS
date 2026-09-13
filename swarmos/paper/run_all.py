@@ -1,59 +1,55 @@
 import os
 import json
-import sys
 import time
 from datetime import datetime
-from swarmos.nebius_jobs.experiments import run_experiment_matrix
+from swarmos.utils.logger import logger
+from swarmos.nebius_jobs.experiments import run_authoritative_pipeline
 from swarmos.paper.verify_claims import verify_paper_claims
 
-def setup_directories():
-    dirs = [
-        "results/raw",
-        "results/summary",
-        "results/statistics",
-        "results/figures",
-        "results/tables",
-        "results/manuscript"
-    ]
-    for d in dirs:
-        os.makedirs(d, exist_ok=True)
-    print(f"[*] Directories initialized.")
+def run_canonical_pipeline():
+    print("====================================================")
+    print("   SWARMOS AUTHORITATIVE RESEARCH PIPELINE v4.0     ")
+    print("====================================================")
+    print(f"[*] Start Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    spec_path = "PAPER_EXPERIMENT_SPEC.json"
+    if not os.path.exists(spec_path):
+        print(f"[!] Error: {spec_path} not found.")
+        return
 
-def load_spec():
-    with open("PAPER_EXPERIMENT_SPEC.json", "r") as f:
-        return json.load(f)
+    with open(spec_path, "r") as f:
+        spec = json.load(f)
+    
+    # 1. Clear Old Results (P0)
+    out_dir = spec["output_dir"]
+    if os.path.exists(out_dir):
+        import shutil
+        shutil.rmtree(out_dir)
+        print(f"[*] Cleaned output directory: {out_dir}")
+    os.makedirs(out_dir, exist_ok=True)
 
-def generate_figures():
-    print("[*] Phase 18: Generating Publication Figures...")
-    # This would call matplotlib/d3-driven plotters
-    print("  - [X] Figure 1: Failure Envelope (Heatmap)")
-    print("  - [X] Figure 2: TCR vs Packet Loss (Line plot)")
-    print("  - [X] Figure 3: Communication Complexity (Scalability)")
+    # 2. Execute Experiments (P0)
+    print(f"[*] Executing Experiment Matrix...")
+    start_t = time.time()
+    run_authoritative_pipeline(spec_path)
+    end_t = time.time()
+    print(f"[*] Simulation Batch Complete. Duration: {end_t - start_t:.1f}s")
 
-def run_pipeline():
-    print(f"[*] SWARMOS Research Pipeline v3.0")
-    print(f"[*] Start Time: {datetime.now()}")
-    
-    setup_directories()
-    spec = load_spec()
-    print(f"[*] Loaded specification: Version {spec['version']}")
-    
-    # 1. Run Experiments
-    print("[*] Phase 11: Executing Matrix...")
-    start_time = time.time()
-    # In this environment, we run the reduced matrix to ensure completion
-    results = run_experiment_matrix(reduced_benchmark=True)
-    duration = time.time() - start_time
-    print(f"[*] Matrix complete in {duration:.1f}s.")
-    
-    # 2. Verify Claims
-    print("\n[*] Phase 25: Verification...")
-    verify_paper_claims()
-    
-    # 3. Generate Figures
-    generate_figures()
-    
-    print(f"\n[*] Pipeline finished successfully.")
+    # 3. Verification & Claims (P1)
+    print("\n[*] Auditing Scientific Claims...")
+    results_path = os.path.join(out_dir, "results.json")
+    verify_paper_claims(results_path)
+
+    # 4. Generate Figures (P1)
+    print("\n[*] Generating Scientific Figures...")
+    from swarmos.paper.generate_figures import main as generate_figs
+    generate_figs()
+
+    print("\n[✓] CANONICAL PIPELINE EXECUTION COMPLETE.")
+    print("====================================================")
 
 if __name__ == "__main__":
-    run_pipeline()
+    # Ensure current directory is in PYTHONPATH
+    import sys
+    sys.path.append(os.getcwd())
+    run_canonical_pipeline()

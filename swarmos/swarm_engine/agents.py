@@ -50,15 +50,10 @@ class Agent:
         self.health = SubsystemHealth()
         
         # CBBA State Vectors
-        # bundle (b_i): ordered list of tasks won by this agent
         self.bundle: List[str] = []
-        # path (p_i): ordered visit sequence optimizing marginal score
         self.path: List[str] = []
-        # winning bids vector y_i: task_id -> highest bid known
         self.winning_bids: Dict[str, float] = {}
-        # winning agents vector z_i: task_id -> agent_id who holds winning bid
         self.winning_agents: Dict[str, Optional[str]] = {}
-        # timestamp vector s_i: agent_k -> last known logical clock from agent_k
         self.timestamps: Dict[str, int] = {}
         self.logical_clock: int = 0
         
@@ -69,6 +64,14 @@ class Agent:
         self.messages_sent: int = 0
         self.messages_received: int = 0
         self.breadcrumbs: List[Tuple[float, float]] = [initial_position]
+        
+        # P0: Adversarial State
+        self.is_adversarial: bool = False
+        self.attack_class: Optional[str] = None
+        self.poison_cycle_duration: float = 10.0
+        self.is_currently_poisoning: bool = False
+        self.last_poison_toggle: float = 0.0
+        self.trust_score: float = 1.0 # For evaluation of TPR/FPR
 
     def update_kinematics(self, dt: float) -> None:
         """Move agent towards its current target position if operational."""

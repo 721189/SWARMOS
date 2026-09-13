@@ -61,10 +61,9 @@ class BaselineRegistry:
             
         engine = CBBAEngine(
             lambda_decay=lambda_decay,
-            anomaly_filter=filter_obj
+            anomaly_filter=filter_obj,
+            enable_recovery=config.get("use_recovery", False)
         )
-        # We attach the recovery flag to the engine for the simulation loop to check
-        engine.enable_recovery = config.get("use_recovery", False)
         engine.baseline_id = baseline_id
         
         return engine

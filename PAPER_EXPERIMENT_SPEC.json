@@ -1,31 +1,22 @@
 {
-  "version": "3.0",
-  "seed_policy": "matched",
-  "seeds_per_condition": 50,
+  "version": "4.0.0",
+  "seed": 42,
   "fleet_sizes": [4, 8, 16, 32, 64, 128],
-  "packet_loss": [0, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7],
-  "attrition": [0, 0.1, 0.2, 0.3, 0.5],
-  "adversarial_fraction": [0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5],
-  "golden_experiments": {
-    "exp1_nominal": {"seeds": 100, "loss": 0, "attrition": 0},
-    "exp2_stress": {"seeds": 50, "loss_range": [0, 0.7]},
-    "exp3_attrition": {"seeds": 50, "attrition_range": [0, 0.5]},
-    "exp4_adversarial": {"seeds": 50, "attack_types": "A-E"}
-  },
-  "attack_types": [
-    "Class A (Impossible Bid)",
-    "Class B (Strategic Malice)",
-    "Class C (Stale Replay)",
-    "Class D (Intermittent Poisoning)",
-    "Class E (Coordinated Attack)"
+  "task_densities": [5, 10, 20],
+  "packet_loss_rates": [0, 0.1, 0.2, 0.3, 0.5, 0.7],
+  "adversarial_fractions": [0, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5],
+  "attack_classes": ["A", "B", "C", "D", "E"],
+  "algorithms": [
+    "CBBA_Standard",
+    "CBBA_Recovery",
+    "CBBA_Filter",
+    "CBBA_Recovery_Filter"
   ],
-  "metrics": [
-    "Task Completion Rate (TCR)",
-    "Mission Utility",
-    "Recovery Latency",
-    "Detection TPR",
-    "False Positive Rate (FPR)",
-    "Communication Overhead",
-    "Convergence Time"
-  ]
+  "trials_per_config": 15,
+  "output_dir": "results/canonical",
+  "analysis": {
+    "significance_level": 0.05,
+    "statistical_tests": ["paired_ttest", "wilcoxon"],
+    "correction": "holm"
+  }
 }

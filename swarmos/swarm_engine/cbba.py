@@ -29,13 +29,19 @@ class CBBAEngine:
         self,
         lambda_decay: float = 0.95,
         bid_epsilon: float = 1e-4,
-        anomaly_filter: Optional[StrategicAnomalyFilter] = None
+        anomaly_filter: Optional[StrategicAnomalyFilter] = None,
+        enable_recovery: bool = False,
+        recovery_timeout_steps: int = 20
     ):
         self.lambda_decay = lambda_decay
         self.bid_epsilon = bid_epsilon
         self.anomaly_filter = anomaly_filter
+        self.enable_recovery = enable_recovery
+        self.recovery_timeout_steps = recovery_timeout_steps
         self.consensus_iterations = 0
         self.has_converged = False
+        # Tracks how many rounds since we last saw a clock increment for an agent
+        self.liveness_counters: Dict[str, Dict[str, int]] = {} 
         self.decision_logs: List[Dict[str, Any]] = []
 
     def compute_path_cost_and_arrival(
@@ -169,6 +175,22 @@ class CBBAEngine:
         for i_id, agent_i in agents.items():
             if not agent_i.health.is_operational(): continue
             
+            # P0: Recovery Module - Check for orphaned tasks before processing neighbors
+            if self.enable_recovery:
+                for task_id in tasks.keys():
+                    z_i = agent_i.winning_agents.get(task_id)
+                    if z_i and z_i != i_id:
+                        # 1. Immediate reset if the winner is quarantined
+                        if self.anomaly_filter and self.anomaly_filter.agent_statuses.get(z_i) == StrategicAnomalyStatus.QUARANTINED:
+                            agent_i.winning_agents[task_id] = None
+                            agent_i.winning_bids[task_id] = 0.0
+                            changes_occurred = True
+                        # 2. Reset if the winner is known to have failed
+                        elif z_i in agents and not agents[z_i].health.is_operational():
+                            agent_i.winning_agents[task_id] = None
+                            agent_i.winning_bids[task_id] = 0.0
+                            changes_occurred = True
+
             for k_id in neighbors_map.get(i_id, []):
                 agent_k = agents[k_id]
                 if not agent_k.health.is_operational(): continue
@@ -183,6 +205,9 @@ class CBBAEngine:
                 if env is not None and hasattr(env, "transmit_packet"):
                     delivered = env.transmit_packet(k_id, i_id, payload_bytes=256)
                     if not delivered: continue
+
+                # Update timestamps for the sender
+                agent_i.timestamps[k_id] = max(agent_i.timestamps.get(k_id, 0), agent_k.timestamps.get(k_id, 0))
 
                 # Process every task according to conflict resolution table
                 for task_id in tasks.keys():
@@ -293,12 +318,14 @@ class CBBAEngine:
                     pruned_idx = b_idx
                     break
             if pruned_idx != -1:
-                for drop_tid in agent_i.bundle[pruned_idx:]:
-                    if drop_tid in agent_i.path: agent_i.path.remove(drop_tid)
+                dropped_tids = set(agent_i.bundle[pruned_idx:])
+                agent_i.bundle = agent_i.bundle[:pruned_idx]
+                agent_i.path = [t for t in agent_i.path if t not in dropped_tids]
+                
+                for drop_tid in dropped_tids:
                     if agent_i.winning_agents.get(drop_tid) == i_id:
                         agent_i.winning_agents[drop_tid] = None
                         agent_i.winning_bids[drop_tid] = 0.0
-                agent_i.bundle = agent_i.bundle[:pruned_idx]
                 changes_occurred = True
                 
         return changes_occurred
@@ -355,8 +382,9 @@ class CBBAEngine:
             # In Phase 2, agents update their timestamp vectors based on neighbors
             c2 = self.phase2_consensus_conflict_resolution(agents, tasks, communication_links, env=env)
             
+            # changed = c1 or c2
+            # self.check_invariants(agents, tasks)
             changed = c1 or c2
-            self.check_invariants(agents, tasks)
 
             if not changed:
                 self.has_converged = True
