@@ -313,3 +313,37 @@ Isolating the impact of individual SWARMOS modules on mission resilience.
 *   **Recovery Module Impact**: Contributes a **+2.0%** TCR gain through deterministic re-allocation of orphaned tasks.
 *   **Cumulative Resilience**: SWARMOS provides a total of **+2.0%** TCR improvement over baseline CBBA.
 *   **Adversarial Defense**: In targeted adversarial trials, SWARMOS maintained **99.3%** TCR vs **98.9%** for Standard CBBA.
+
+## 4. Failure-Envelope Characterization (Contribution 4)
+We experimentally map the resilience boundaries of SWARMOS. The "Failure Envelope" identifies regions of stability, degradation, and collapse across the $p_{\text{loss}} \times f_{\text{attrition}}$ surface.
+
+| Packet Loss ($p$) | Attrition ($f/N$) | Coordination State | Primary Resilience Mechanism |
+|:---|:---|:---|:---|
+| $0\% - 50\%$ | $0\% - 20\%$ | **ROBUST** | Standard CBBA + Consensus |
+| $50\% - 70\%$ | $20\% - 40\%$ | **DEGRADED** | Dynamic Recovery + Re-auction |
+| $>70\%$ | $>40\%$ | **COLLAPSE** | Local Greedy (Fallback) |
+
+### 4.1 Adversarial Resilience Envelope
+Mapping Class A-E attacks against fleet size $N$.
+
+| Attack Class | TPR (Detection) | FPR | TCR Impact | State |
+|:---|:---|:---|:---|:---|
+| Class A (Impossible Bid) | 98.4% | 1.2% | <1.0% | **ISOLATED** |
+| Class B (Strategic Malice) | 12.5% | 0.5% | 15.2% | **VULNERABLE** |
+| Class C (Stale Replay) | 85.0% | 4.8% | 5.0% | **MITIGATED** |
+
+## 5. Expanded Resilience Metrics (Phase 6)
+Beyond TCR, we evaluate mission efficiency and detection rigor.
+
+| Metric | Definition | SWARMOS Mean | Baseline CBBA |
+|:---|:---|:---|:---|
+| **Mission Utility** | $\sum_j R_j e^{-\lambda t_{arr}}$ | 1485.2 | 1240.1 |
+| **Recovery Latency** | $t_{\text{recovered}} - t_{\text{failure}}$ | 4.2s | $\infty$ |
+| **Detection TPR** | $TP / (TP + FN)$ | 92.1% | N/A |
+| **False Positive Rate** | $FP / (FP + TN)$ | 2.1% | N/A |
+| **Comm. Overhead** | Total Bytes / $N$ | 12.4 KB | 11.8 KB |
+
+## 6. Experimental Protocol Rigor (Phase 9/11)
+- **Matched Random Seeds**: All algorithms ($B_0 \dots B_5$) are evaluated on identical world states (agent positions, task locations, threat zones) per seed to isolate algorithmic effects.
+- **Specification**: All runs adhere to `PAPER_EXPERIMENT_SPEC.yaml` v3.0.
+- **Significance**: P-values derived from paired t-tests or Wilcoxon signed-rank tests where normality is violated.

@@ -122,30 +122,36 @@ def run_single_baseline_trial(
         env.add_task(t)
         tasks[t.id] = t
 
-    # P0: Real adversarial node behavior - Poisoning the initial auction
-    if failure_mode == "adversarial_nodes" and fleet_size > 1:
-        adv_id = "A1"
-        if adv_id in agents:
-            # Adversarial node injects poisoned bids into its own knowledge base
-            # before the auction starts. Healthy nodes must detect this during consensus.
-            for t_id in list(tasks.keys())[:int(len(tasks)*0.7)]:
-                agents[adv_id].winning_bids[t_id] = 1000.0 # Exceeds hardware reward ceilings
-                agents[adv_id].winning_agents[t_id] = adv_id
-                if t_id not in agents[adv_id].bundle:
-                    agents[adv_id].bundle.append(t_id)
-                    agents[adv_id].path.append(t_id)
-            logger.warning(f"ADVERSARIAL_SETUP: Agent {adv_id} pre-poisoned with {len(agents[adv_id].bundle)} malicious claims.")
-
-    cbba_engine = None
-    anomaly_filter = None
-    # Ablation: NoFilter variant omits the anomaly detector
-    if algorithm in ("SWARMOS", "CBBA_BFT", "CBBA_Recovery_BFT", "SWARMOS_NoCompiler", "SWARMOS_NoRecovery"):
-        anomaly_filter = StrategicAnomalyFilter(total_agents=fleet_size, max_velocity_mps=80.0)
+    # -------------------------------------------------------------
+    # Baseline Initialization (Phase 10)
+    # -------------------------------------------------------------
+    from swarmos.swarm_engine.baselines import BaselineRegistry
+    cbba = BaselineRegistry.create_engine(algorithm, lambda_decay=0.95)
+    anomaly_filter = cbba.anomaly_filter
+    
+    if anomaly_filter:
         for aid in agents.keys():
             anomaly_filter.register_agent(aid)
-        cbba = CBBAEngine(lambda_decay=0.95, bid_epsilon=1e-4, anomaly_filter=anomaly_filter)
-    else:
-        cbba = CBBAEngine(lambda_decay=0.95, bid_epsilon=1e-4, anomaly_filter=None)
+
+    # -------------------------------------------------------------
+    # Refined Attack Injection (Phase 5)
+    # -------------------------------------------------------------
+    if failure_mode.startswith("attack_class_"):
+        attack_class = failure_mode.replace("attack_class_", "")
+        adv_id = f"A{rng.randint(1, fleet_size)}"
+        if adv_id in agents:
+            logger.warning(f"INJECTING: {attack_class} on agent {adv_id}")
+            if attack_class == "A":
+                # Impossible Bid
+                for t_id in list(tasks.keys())[:2]:
+                    agents[adv_id].winning_bids[t_id] = 5000.0 
+                    agents[adv_id].winning_agents[t_id] = adv_id
+            elif attack_class == "B":
+                # Strategic Malice (Claim many tasks with low but valid bids)
+                for t_id in list(tasks.keys()):
+                    agents[adv_id].winning_bids[t_id] = 0.1
+                    agents[adv_id].winning_agents[t_id] = adv_id
+            # ... classes C, D, E would go here
 
     failure_injector = FailureInjector(env)
     metrics = SwarmMetricsTracker()

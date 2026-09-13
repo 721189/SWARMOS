@@ -18,19 +18,27 @@ We model a highly capable adversary with the following capabilities:
 
 ---
 
-## 3. Attack Vectors & Algorithmic Defenses
+## 3. Attack Classes & Algorithmic Defenses
 
-### A. Bid Poisoning & Sybil Inflation
-*   **Attack:** A compromised node broadcasts artificially high bids (e.g., $9999.0$) for tasks it cannot physically reach, attempting to starve the rest of the fleet and prevent mission completion.
-*   **Defense (Byzantine Anomaly Filter):** SWARMOS abandons traditional PBFT (which scales poorly and requires synchronized epochs) in favor of a **Kinematic Anomaly Filter**. The filter clamps incoming bids against the known physical constraints of the claiming agent (e.g., maximum velocity, distance to target). Bids exceeding physical reality ($T_{arrival} < T_{minimum\_kinematic}$) are rejected, and the offending node receives a trust penalty. If trust falls below the quarantine threshold, the node is isolated.
+### Class A: Impossible Bid (Physical Violation)
+- **Attack**: A compromised node broadcasts bids that violate kinematic reality (e.g., arrival times faster than $v_{\max}$ or reward scores exceeding the theoretical maximum $b_{\max}^{physical}$).
+- **Defense (Kinematic Anomaly Filter)**: SWARMOS rejects any bid that fails a bounds-check against known agent velocity and current distance. This is the primary "Byzantine-lite" defense.
 
-### B. Network Partitioning & RF Jamming
-*   **Attack:** The adversary jams the center of the operational theater, severing the mesh graph into two disconnected sub-graphs (Network A and Network B).
-*   **Defense (Local Convergence):** SWARMOS does not require global connectivity to function. The CBBA engine guarantees that any connected sub-graph will converge to a locally conflict-free allocation. Tasks in Network A will be allocated among agents in Network A. When the jamming bubble lifts and the graphs merge, the conflict resolution matrix (Choi 2009) deterministically resolves the global state.
+### Class B: Strategic Malice (Mathematically Valid)
+- **Attack**: The attacker submits bids that are physically plausible but strategically disastrous. For example, monopolizing high-priority tasks with marginally winning bids to prevent more efficient agents from claiming them.
+- **Defense**: Partially mitigated by global utility tracking, but remains a known limitation of the current anomaly filter.
 
-### C. Kinetic Attrition (Orphaned Tasks)
-*   **Attack:** An honest agent carrying a bundle of 4 critical tasks is kinetically destroyed.
-*   **Defense (Dynamic Re-Auctioning):** Surviving nodes detect the loss of telemetry. The `CBBA_Recovery` mechanism purges the dead node's claims from the collective belief state. All incomplete tasks in the dead node's bundle are returned to `UNASSIGNED` status, triggering a dynamic re-auction across the surviving nodes.
+### Class C: Stale Replay
+- **Attack**: Re-broadcasting an old, valid belief state to force other agents to reset their current, more optimal bundles (thrashes consensus).
+- **Defense (Temporal Consistency Check)**: Bids are timestamped and synchronized; messages with inconsistent or ancient timestamps are ignored.
+
+### Class D: Intermittent Poisoning
+- **Attack**: A node behaves honestly for 90% of the mission to build trust, then injects Class A/B attacks during critical mission windows.
+- **Defense (Trust-Score Decay)**: Trust is gained slowly but lost rapidly. A single Class A violation triggers a heavy penalty, potentially leading to immediate quarantine.
+
+### Class E: Coordinated Attack (Collusion)
+- **Attack**: Multiple compromised agents synchronize their bidding to bypass individual trust checks or force specific global allocations.
+- **Defense**: Current defense assumes non-colluding anomalies; this is a target for future research.
 
 ---
 

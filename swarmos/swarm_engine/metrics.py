@@ -21,6 +21,7 @@ class SwarmSnapshot:
     total_messages: int
     global_reward_earned: float
     average_battery: float
+    optimality_ratio: float = 0.0
 
 class SwarmMetricsTracker:
     def __init__(self):
@@ -63,6 +64,11 @@ class SwarmMetricsTracker:
         total_msgs = env.packets_delivered if env is not None and hasattr(env, "packets_delivered") else sum(a.messages_sent for a in agents.values())
         total_batt = sum(a.health.battery for a in agents.values()) / max(1, len(agents))
         reward_earned = sum(t.base_reward for t in tasks.values() if t.status == TaskStatus.COMPLETED)
+        # Dynamic calculation of theoretical max (Centralized Greedy Baseline)
+        from swarmos.reference_cbba.centralized_solver import CentralizedSolver
+        solver = CentralizedSolver()
+        theoretical_max = solver.solve_greedy(agents, tasks)
+        optimality_ratio = reward_earned / max(0.1, theoretical_max)
 
         snap = SwarmSnapshot(
             timestamp=round(time.time() - self.start_time, 2),
@@ -74,6 +80,7 @@ class SwarmMetricsTracker:
             global_reward_earned=round(reward_earned, 1),
             average_battery=round(total_batt, 1)
         )
+        snap.optimality_ratio = round(optimality_ratio, 3)
         self.snapshots.append(snap)
         if len(self.snapshots) > 200:
             self.snapshots.pop(0)
@@ -122,6 +129,7 @@ class SwarmMetricsTracker:
             "completed_tasks": completed,
             "total_tasks": total_tasks,
             "task_completion_pct": round((completed / max(1, total_tasks)) * 100.0, 1),
+            "optimality_ratio": round(reward_earned / max(0.1, theoretical_max), 3),
             "unassigned_tasks": unassigned,
             "avg_consensus_ms": round(avg_consensus_ms, 2),
             "avg_replan_ms": round(avg_replan_ms, 2),
