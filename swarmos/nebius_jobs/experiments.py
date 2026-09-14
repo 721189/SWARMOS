@@ -46,7 +46,7 @@ from swarmos.utils.analysis import (
     holm_correction
 )
 
-ARTIFACT_SCHEMA_VERSION = "4.1.0"
+ARTIFACT_SCHEMA_VERSION = "4.2.0"
 
 ALGORITHM_MAP = {
     "B0_Static": "B0_Static",
@@ -188,13 +188,12 @@ def run_single_trial(
                     agents[aid].bundle.append(tid)
                     agents[aid].path.append(tid)
 
-    # 6. Failure Modes (attrition)
+    # 6. Failure Modes (attrition scheduling)
+    attrition_targets = []
     if failure_mode in ["mild_attrition", "loss_50_catastrophic"]:
         fail_count = 1 if failure_mode == "mild_attrition" else max(1, fleet_size // 2)
         honest_ids = [aid for aid in agent_ids if aid not in attackers]
-        for aid in honest_ids[:fail_count]:
-            agents[aid].health.propulsion = 0.0
-            agents[aid].status = AgentStatus.FAILED
+        attrition_targets = honest_ids[:fail_count]
 
     # 7. Simulation Tracking Variables (P1-03 Disaggregated Metrics & Task-Level Attribution)
     total_sim_time = 0.0
@@ -227,6 +226,46 @@ def run_single_trial(
         env.step(dt)
         t_topo_end = time.time()
         topology_construction_time_ms += (t_topo_end - t_topo_start) * 1000.0
+
+        # Mid-mission attrition failure injection (step 2 at t=1.0s, once tasks are allocated)
+        if attrition_targets and total_sim_time >= 1.0:
+            for aid in list(attrition_targets):
+                target_agent = agents[aid]
+                if target_agent.status != AgentStatus.FAILED:
+                    target_agent.health.propulsion = 0.0
+                    target_agent.status = AgentStatus.FAILED
+                    metrics.injected_failure_count += 1
+                    
+                    released_tasks = []
+                    if target_agent.current_task_id:
+                        released_tasks.append(target_agent.current_task_id)
+                        target_agent.current_task_id = None
+                    for tid in target_agent.bundle:
+                        if tid not in released_tasks:
+                            released_tasks.append(tid)
+                    target_agent.bundle = []
+                    target_agent.path = []
+                    
+                    for tid in released_tasks:
+                        t_rel = tasks[tid]
+                        if t_rel.status != TaskStatus.COMPLETED:
+                            t_rel.status = TaskStatus.UNASSIGNED
+                            t_rel.assigned_agent_id = None
+                            orphaned_task_ids.add(tid)
+                            
+                    if engine.enable_recovery and released_tasks:
+                        t_replan_start = time.perf_counter()
+                        for s_agent in agents.values():
+                            if s_agent.health.is_operational():
+                                for tid in released_tasks:
+                                    s_agent.winning_bids[tid] = 0.0
+                                    s_agent.winning_agents[tid] = None
+                        comm_links_replan = list(env.update_mesh_network())
+                        engine.run_auction_round(agents, tasks, comm_links_replan, max_iterations=5, env=env)
+                        t_replan_end = time.perf_counter()
+                        replan_ms = (t_replan_end - t_replan_start) * 1000.0
+                        metrics.record_replan_latency(replan_ms)
+            attrition_targets = []
         
         # Attack Dynamic Logic
         for aid in attackers:
@@ -262,12 +301,18 @@ def run_single_trial(
                             agents[aid].winning_agents[tid] = None
                             agents[aid].winning_bids[tid] = 0.0
             
-            # Class E: Kinematic Telemetry Spoofing
-            elif attack_class == "E":
+            # Class E: Kinematic Telemetry Spoofing (calibrated boundary testing)
+            elif attack_class in ["E", "E_stealth"]:
                 total_kinematic_spoofs_attempted += 1
+                # Stealthy variant: small per-step drift calibrated near the kinematic threshold v_max
+                # Displaces just above v_max * dt + tolerance (apparent speed ~112 m/s vs vmax=100.0 m/s),
+                # providing an informative test of the filter's calibration boundary.
+                spoof_heading = rng_attack.uniform(0.0, 2.0 * math.pi)
+                v_test = (filter_obj.max_velocity_mps * 1.12) if filter_obj else 112.0
+                step_displacement = (v_test * dt) + 7.0
                 agents[aid].position = (
-                    agents[aid].position[0] + rng_attack.choice([-300.0, 300.0]),
-                    agents[aid].position[1] + rng_attack.choice([-300.0, 300.0])
+                    agents[aid].position[0] + step_displacement * math.cos(spoof_heading),
+                    agents[aid].position[1] + step_displacement * math.sin(spoof_heading)
                 )
 
         # Anomaly Filtering & Isolation
@@ -278,7 +323,7 @@ def run_single_trial(
                     reason = None
                     
                     # Telemetry check (Class E)
-                    if attack_class == "E":
+                    if attack_class in ["E", "E_stealth"]:
                         valid, reason = filter_obj.validate_telemetry_kinematics(
                             agent.id, agent.position[0], agent.position[1], total_sim_time
                         )
@@ -335,10 +380,27 @@ def run_single_trial(
                                 t_rel.assigned_agent_id = None
                                 orphaned_task_ids.add(tid)
 
+                        if engine.enable_recovery and released_tasks:
+                            t_replan_start = time.perf_counter()
+                            for s_agent in agents.values():
+                                if s_agent.health.is_operational():
+                                    for tid in released_tasks:
+                                        s_agent.winning_bids[tid] = 0.0
+                                        s_agent.winning_agents[tid] = None
+                            comm_links_replan = list(env.update_mesh_network())
+                            engine.run_auction_round(agents, tasks, comm_links_replan, max_iterations=5, env=env)
+                            t_replan_end = time.perf_counter()
+                            replan_ms = (t_replan_end - t_replan_start) * 1000.0
+                            metrics.record_replan_latency(replan_ms)
+
         # Auction Phase
         comm_links = list(env.update_mesh_network())
         consensus_messaging_count += len(comm_links) * fleet_size
+        t_auction_start = time.perf_counter()
         round_res = engine.run_auction_round(agents, tasks, comm_links, max_iterations=5, env=env)
+        t_auction_end = time.perf_counter()
+        auction_duration_ms = (t_auction_end - t_auction_start) * 1000.0
+        metrics.consensus_durations.append(auction_duration_ms)
         
         # Task Execution Phase
         for agent in agents.values():
@@ -394,7 +456,7 @@ def run_single_trial(
     tcr = len(completed_tasks) / max(1, len(tasks))
     alive_count = sum(1 for a in honest_agents.values() if a.status != AgentStatus.FAILED)
     survival_pct = (alive_count / max(1, n_honest)) * 100.0
-    replan_latency = 0.0 if canonical_algo == "B0_Static" else (24.5 if canonical_algo in ["B3_CBBA_Recovery", "B5_SWARMOS"] else 0.0)
+    replan_latency = kpis.get("avg_replan_ms", 0.0)
     
     # Disaggregated Rates (P1-03 & P1-04 Task-level attribution)
     attack_det_rate = (quarantined_malicious_nodes / max(1, n_attackers)) if n_attackers > 0 else 1.0
@@ -428,8 +490,8 @@ def run_single_trial(
         "reference_utility_ratio": emp_ref_ratio,
         "optimality_ratio": emp_ref_ratio,
         "normalized_utility": emp_ref_ratio,
-        "mean_convergence_ms": kpis.get("avg_consensus_ms", 120.0) + (fleet_size * 12.0 if mac_protocol == "D-TDMA" else 0.0),
-        "convergence_time": kpis.get("avg_consensus_ms", 120.0) + (fleet_size * 12.0 if mac_protocol == "D-TDMA" else 0.0),
+        "mean_convergence_ms": kpis.get("avg_consensus_ms", 0.0) + (fleet_size * 12.0 if mac_protocol == "D-TDMA" else 0.0),
+        "convergence_time": kpis.get("avg_consensus_ms", 0.0) + (fleet_size * 12.0 if mac_protocol == "D-TDMA" else 0.0),
         "mean_replan_latency": replan_latency,
         "fleet_survival_pct": survival_pct,
         "packets_generated": packets_generated,
@@ -494,19 +556,58 @@ def run_authoritative_pipeline(spec_path: str = "PAPER_EXPERIMENT_SPEC.json", re
     with open(spec_path, "r") as f:
         spec = json.load(f)
         
-    # Explicit schema validation step to fail loudly on missing keys
+    # Explicit schema validation step to fail loudly on missing or unrecognized keys
+    ALLOWED_SPEC_KEYS = {
+        "code_version",
+        "spec_version",
+        "pipeline_version",
+        "seed",
+        "description",
+        "is_reduced_validation_matrix",
+        "fleet_sizes",
+        "task_densities",
+        "packet_loss_rates",
+        "adversarial_fractions",
+        "attack_classes",
+        "algorithms",
+        "trials_per_config",
+        "output_dir",
+        "analysis"
+    }
+    unrecognized = set(spec.keys()) - ALLOWED_SPEC_KEYS
+    if unrecognized:
+        raise ValueError(f"CRITICAL SCHEMA ERROR: Unrecognized key(s) {sorted(list(unrecognized))} in experimental specification '{spec_path}'.")
+
     mandatory_keys = [
         "fleet_sizes",
         "task_densities",
         "packet_loss_rates",
         "adversarial_fractions",
         "attack_classes",
+        "algorithms",
         "trials_per_config",
         "output_dir"
     ]
     for key in mandatory_keys:
         if key not in spec:
             raise KeyError(f"CRITICAL SCHEMA ERROR: Mandatory key '{key}' is missing from experimental specification '{spec_path}'.")
+    
+    if not isinstance(spec["fleet_sizes"], list) or not spec["fleet_sizes"]:
+        raise TypeError("fleet_sizes must be a non-empty list of integers.")
+    if not isinstance(spec["task_densities"], list) or not spec["task_densities"]:
+        raise TypeError("task_densities must be a non-empty list of integers.")
+    if not isinstance(spec["packet_loss_rates"], list) or not spec["packet_loss_rates"]:
+        raise TypeError("packet_loss_rates must be a non-empty list of floats.")
+    if not isinstance(spec["adversarial_fractions"], list) or not spec["adversarial_fractions"]:
+        raise TypeError("adversarial_fractions must be a non-empty list of floats.")
+    if not isinstance(spec["attack_classes"], list) or not spec["attack_classes"]:
+        raise TypeError("attack_classes must be a non-empty list of attack classes.")
+    if not isinstance(spec["algorithms"], list) or not spec["algorithms"]:
+        raise TypeError("algorithms must be a non-empty list of strings.")
+    if not isinstance(spec["trials_per_config"], int) or spec["trials_per_config"] < 1:
+        raise ValueError("trials_per_config must be an integer >= 1.")
+    if not isinstance(spec["output_dir"], str) or not spec["output_dir"].strip():
+        raise ValueError("output_dir must be a non-empty string.")
     
     out_dir = spec["output_dir"]
     os.makedirs(out_dir, exist_ok=True)
@@ -603,6 +704,8 @@ def run_authoritative_pipeline(spec_path: str = "PAPER_EXPERIMENT_SPEC.json", re
                         p_summary["task_recovery_rate"] = compute_mean([r["task_recovery_rate"] for r in trial_buckets[pivot]])
                         p_summary["PDR_ci_95"] = list(compute_confidence_interval(pivot_pdrs, 0.95))
                         p_summary["convergence_ms_ci_95"] = list(compute_confidence_interval(pivot_conv, 0.95))
+                        p_summary["mean_convergence_ms"] = compute_mean(pivot_conv)
+                        p_summary["mean_replan_latency"] = compute_mean([r["mean_replan_latency"] for r in trial_buckets[pivot]])
                         p_summary["prob_success_09"] = compute_mean([1.0 if t >= 0.9 else 0.0 for t in pivot_tcrs])
                         p_summary["p_val"] = 1.0
                         p_summary["p_val_holm"] = 1.0
@@ -642,6 +745,8 @@ def run_authoritative_pipeline(spec_path: str = "PAPER_EXPERIMENT_SPEC.json", re
                             summary["task_recovery_rate"] = compute_mean([r["task_recovery_rate"] for r in trial_buckets[algo]])
                             summary["PDR_ci_95"] = list(compute_confidence_interval(pdrs, 0.95))
                             summary["convergence_ms_ci_95"] = list(compute_confidence_interval(convs, 0.95))
+                            summary["mean_convergence_ms"] = compute_mean(convs)
+                            summary["mean_replan_latency"] = compute_mean([r["mean_replan_latency"] for r in trial_buckets[algo]])
                             summary["prob_success_09"] = compute_mean([1.0 if t >= 0.9 else 0.0 for t in tcrs])
                             summary["p_val"] = wilcoxon_ps[idx]
                             summary["p_val_holm"] = corrected_w_ps[idx]
