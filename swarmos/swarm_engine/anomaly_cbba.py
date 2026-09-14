@@ -61,6 +61,39 @@ class StrategicAnomalyFilter:
 
         return True, None
 
+    def validate_timestamp(self, agent_id: str, reported_clock: int, current_sim_step: int) -> Tuple[bool, Optional[str]]:
+        """
+        Detects Class C (Stale Replay / Timestamp Manipulation) attacks:
+        Logical clocks must advance monotonically and cannot exceed maximum clock skew relative to simulation steps.
+        """
+        status = self.agent_statuses.get(agent_id, StrategicAnomalyStatus.TRUSTED)
+        if status in (StrategicAnomalyStatus.QUARANTINED, StrategicAnomalyStatus.EJECTED):
+            return False, f"Agent {agent_id} is {status}."
+
+        max_clock_skew = current_sim_step * 5 + 50
+        if reported_clock > max_clock_skew or reported_clock < 0:
+            reason = f"Timestamp anomaly: reported clock {reported_clock} exceeds skew limit {max_clock_skew}"
+            self._penalize_agent(agent_id, 35.0, reason)
+            self.detection_metrics["total_detections"] += 1
+            return False, reason
+        return True, None
+
+    def validate_hoarding(self, agent_id: str, has_bundle: bool, is_stationary: bool, stationary_steps: int) -> Tuple[bool, Optional[str]]:
+        """
+        Detects Class B (Strategic Cluster Hoarding + Zero Traversal) attacks:
+        Nodes holding non-empty task bundles while remaining static (propulsion = 0 or stationary) for > 15 steps.
+        """
+        status = self.agent_statuses.get(agent_id, StrategicAnomalyStatus.TRUSTED)
+        if status in (StrategicAnomalyStatus.QUARANTINED, StrategicAnomalyStatus.EJECTED):
+            return False, f"Agent {agent_id} is {status}."
+
+        if has_bundle and is_stationary and stationary_steps >= 15:
+            reason = f"Cluster hoarding: Agent {agent_id} holds tasks with zero traversal for {stationary_steps} steps"
+            self._penalize_agent(agent_id, 45.0, reason)
+            self.detection_metrics["total_detections"] += 1
+            return False, reason
+        return True, None
+
     def validate_telemetry_kinematics(
         self,
         agent_id: str,

@@ -33,7 +33,7 @@ def generate_markdown_results_table(results_path: str = "results/canonical/resul
         grouped[key][algo] = c
 
     md_lines = []
-    md_lines.append("| Packet Loss ($p$) | Adversarial ($f$) | Algorithm | Mean TCR [95% CI] | Ref Ratio ($U/U_{ref}$) | PDR | Conv (ms) |")
+    md_lines.append("| Packet Loss ($p$) | Adversarial ($f$) | Algorithm | Mean TCR [95% Student-t CI] | Ref Ratio ($U_{actual}/U_{ref}$) | PDR | Conv (ms) |")
     md_lines.append("| :--- | :--- | :--- | :--- | :--- | :--- | :--- |")
     
     for key, algos in sorted(grouped.items()):
@@ -46,7 +46,7 @@ def generate_markdown_results_table(results_path: str = "results/canonical/resul
                 c = algos[algo_name]
                 tcr = c.get("TCR", 0.0)
                 tcr_ci = c.get("TCR_ci_95", [tcr, tcr])
-                opt = c.get("optimality_ratio", 0.0)
+                opt = c.get("empirical_reference_ratio", c.get("optimality_ratio", 0.0))
                 pdr = c.get("PDR", 1.0)
                 conv = c.get("convergence_time", 120.0)
                 

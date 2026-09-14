@@ -40,8 +40,53 @@ def erf(x: float) -> float:
 def normal_cdf(x: float) -> float:
     return 0.5 * (1.0 + erf(x / math.sqrt(2.0)))
 
+def student_t_pdf(x: float, df: float) -> float:
+    """Student's t probability density function."""
+    if df <= 0:
+        return 0.0
+    log_c = math.lgamma((df + 1.0) / 2.0) - 0.5 * math.log(df * math.pi) - math.lgamma(df / 2.0)
+    return math.exp(log_c - 0.5 * (df + 1.0) * math.log(1.0 + (x * x) / df))
+
+def student_t_cdf_half(t_val: float, df: float, steps: int = 1000) -> float:
+    """Integral of Student's t PDF from 0 to t_val via Simpson's rule."""
+    if t_val <= 0 or df <= 0:
+        return 0.0
+    h = t_val / steps
+    s = student_t_pdf(0.0, df) + student_t_pdf(t_val, df)
+    for i in range(1, steps):
+        x = i * h
+        weight = 4.0 if i % 2 == 1 else 2.0
+        s += weight * student_t_pdf(x, df)
+    return s * h / 3.0
+
+def student_t_ppf(p: float, df: float) -> float:
+    """
+    Inverse cumulative distribution function (quantile function) for Student's t distribution.
+    For 95% two-sided CI with df=n-1, pass p=0.975.
+    """
+    if df < 1:
+        return 1.95996
+    if HAS_SCIPY and sp_stats is not None:
+        try:
+            return float(sp_stats.t.ppf(p, df))
+        except Exception:
+            pass
+    target = p - 0.5
+    low, high = 0.0, 100.0
+    for _ in range(50):
+        mid = (low + high) / 2.0
+        val = student_t_cdf_half(mid, df)
+        if val < target:
+            low = mid
+        else:
+            high = mid
+    return mid
+
 def compute_confidence_interval(data: List[float], confidence: float = 0.95) -> Tuple[float, float]:
-    """Computes (lower, upper) confidence interval for the sample mean."""
+    """
+    Computes exact (lower, upper) Student-t confidence interval (df = n - 1) for the sample mean.
+    Required for publication rigor when n is finite (e.g. n = 15).
+    """
     n = len(data)
     if n == 0:
         return 0.0, 0.0
@@ -49,10 +94,36 @@ def compute_confidence_interval(data: List[float], confidence: float = 0.95) -> 
     if n < 2:
         return mean, mean
     std = compute_std(data, mean)
-    # Z-critical for 95% = 1.95996, 99% = 2.57583
-    z_crit = 1.95996 if abs(confidence - 0.95) < 0.01 else 2.57583
-    margin = z_crit * (std / math.sqrt(n))
+    df = n - 1
+    p = 1.0 - (1.0 - confidence) / 2.0
+    t_crit = student_t_ppf(p, df)
+    margin = t_crit * (std / math.sqrt(n))
     return mean - margin, mean + margin
+
+def compute_bootstrap_ci(
+    data: List[float],
+    confidence: float = 0.95,
+    n_resamples: int = 2000,
+    seed: int = 42
+) -> Tuple[float, float]:
+    """Non-parametric percentile bootstrap 95% confidence interval for sample mean."""
+    n = len(data)
+    if n < 2:
+        m = compute_mean(data)
+        return m, m
+    import random
+    rng = random.Random(seed)
+    means = []
+    for _ in range(n_resamples):
+        sample = [rng.choice(data) for _ in range(n)]
+        means.append(compute_mean(sample))
+    means.sort()
+    alpha = 1.0 - confidence
+    lower_idx = int(math.floor(alpha / 2.0 * n_resamples))
+    upper_idx = int(math.ceil((1.0 - alpha / 2.0) * n_resamples)) - 1
+    lower_idx = max(0, min(n_resamples - 1, lower_idx))
+    upper_idx = max(0, min(n_resamples - 1, upper_idx))
+    return means[lower_idx], means[upper_idx]
 
 def cohens_d(g1: List[float], g2: List[float]) -> float:
     """Calculates Cohen's d effect size for paired or equal-variance comparisons."""

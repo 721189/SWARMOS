@@ -17,6 +17,7 @@
   "output_dir": "results/canonical",
   "analysis": {
     "significance_level": 0.05,
+    "confidence_interval": "95% Student-t confidence intervals (df = n - 1)",
     "statistical_tests": ["paired_ttest", "wilcoxon"],
     "correction": "holm"
   }

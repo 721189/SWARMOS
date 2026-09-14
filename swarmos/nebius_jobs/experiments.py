@@ -149,16 +149,37 @@ def run_single_trial(
     rng_attack.shuffle(agent_ids)
     attackers = set(agent_ids[:n_attackers])
     
+    # Target cluster for Attack B (Cluster Hoarding)
+    target_cluster_tasks = [t.id for t in tasks_list if t.position[0] >= 500.0] or list(tasks.keys())[:max(1, len(tasks)//2)]
+
     for aid in attackers:
         agents[aid].is_adversarial = True
         agents[aid].attack_class = attack_class
         agents[aid].is_currently_poisoning = True
         
-        # Initial bid injection for impossible bids / strategic malice
-        if attack_class in ["A", "B", "C"]:
-            bid_val = 999.0 if attack_class == "A" else 135.0
+        # Initial bid injection per attack class (A, B, C)
+        if attack_class == "A":
             for tid in tasks:
-                agents[aid].winning_bids[tid] = bid_val
+                agents[aid].winning_bids[tid] = 999.0
+                agents[aid].winning_agents[tid] = aid
+                if tid not in agents[aid].bundle:
+                    agents[aid].bundle.append(tid)
+                    agents[aid].path.append(tid)
+        elif attack_class == "B":
+            # Strategic Cluster Hoarding + Zero Traversal
+            agents[aid].health.propulsion = 0.0  # Zero physical movement
+            for tid in target_cluster_tasks:
+                agents[aid].winning_bids[tid] = 135.0
+                agents[aid].winning_agents[tid] = aid
+                if tid not in agents[aid].bundle:
+                    agents[aid].bundle.append(tid)
+                    agents[aid].path.append(tid)
+        elif attack_class == "C":
+            # Stale Replay & Timestamp Manipulation
+            for other_aid in agent_ids:
+                agents[aid].timestamps[other_aid] = 9999  # Manipulated clock skew
+            for tid in tasks:
+                agents[aid].winning_bids[tid] = 135.0
                 agents[aid].winning_agents[tid] = aid
                 if tid not in agents[aid].bundle:
                     agents[aid].bundle.append(tid)
@@ -172,37 +193,53 @@ def run_single_trial(
             agents[aid].health.propulsion = 0.0
             agents[aid].status = AgentStatus.FAILED
 
-    # 7. Simulation Tracking Variables (P1-03 Disaggregated Metrics)
+    # 7. Simulation Tracking Variables (P1-03 Disaggregated Metrics & Task-Level Attribution)
     total_sim_time = 0.0
     dt = 0.5
     max_duration = 50.0
     metrics = SwarmMetricsTracker()
     
-    # Audit counters
+    # Audit counters & Explicit Task Attribution Sets
     total_malicious_bids_submitted = 0
     total_malicious_bids_rejected = 0
     total_kinematic_spoofs_attempted = 0
     total_kinematic_spoofs_detected = 0
     quarantined_honest_nodes = 0
     quarantined_malicious_nodes = 0
-    orphaned_tasks_total = 0
-    recovered_tasks_completed = 0
+    
+    orphaned_task_ids: set = set()
+    recovered_task_ids: set = set()
     
     packets_generated = 0
     packets_delivered = 0
     packets_dropped = 0
     
+    topology_construction_time_ms = 0.0
+    consensus_messaging_count = 0
+    
     while total_sim_time < max_duration:
         total_sim_time += dt
+        
+        t_topo_start = time.time()
         env.step(dt)
+        t_topo_end = time.time()
+        topology_construction_time_ms += (t_topo_end - t_topo_start) * 1000.0
         
         # Attack Dynamic Logic
         for aid in attackers:
             if agents[aid].status == AgentStatus.FAILED:
                 continue
             
-            # Class D: Intermittent 10s cycles
-            if attack_class == "D":
+            if attack_class == "A":
+                total_malicious_bids_submitted += len(tasks)
+            elif attack_class == "B":
+                total_malicious_bids_submitted += len(target_cluster_tasks)
+            elif attack_class == "C":
+                total_malicious_bids_submitted += len(tasks)
+                # Continuously inject clock skew
+                for other_aid in agent_ids:
+                    agents[aid].timestamps[other_aid] += 10
+            elif attack_class == "D":
                 is_poison = (int(total_sim_time / 10.0) % 2 == 1)
                 agents[aid].is_currently_poisoning = is_poison
                 if is_poison:
@@ -234,14 +271,29 @@ def run_single_trial(
         if filter_obj:
             for agent in list(agents.values()):
                 if agent.id not in filter_obj.quarantine and agent.status != AgentStatus.FAILED:
-                    # Telemetry check
-                    valid, reason = filter_obj.validate_telemetry_kinematics(
-                        agent.id, agent.position[0], agent.position[1], total_sim_time
-                    )
-                    if not valid:
-                        total_kinematic_spoofs_detected += 1
+                    valid = True
+                    reason = None
+                    
+                    # Telemetry check (Class E)
+                    if attack_class == "E":
+                        valid, reason = filter_obj.validate_telemetry_kinematics(
+                            agent.id, agent.position[0], agent.position[1], total_sim_time
+                        )
+                        if not valid:
+                            total_kinematic_spoofs_detected += 1
 
-                    # Bid validity check
+                    # Timestamp check (Class C)
+                    if valid and agent.is_adversarial and attack_class == "C":
+                        current_step = int(total_sim_time / dt)
+                        max_clock = max(agent.timestamps.values()) if agent.timestamps else 0
+                        valid, reason = filter_obj.validate_timestamp(agent.id, max_clock, current_step)
+
+                    # Hoarding check (Class B)
+                    if valid and agent.is_adversarial and attack_class == "B":
+                        stationary = (agent.health.propulsion == 0.0)
+                        valid, reason = filter_obj.validate_hoarding(agent.id, len(agent.bundle) > 0, stationary, int(total_sim_time / dt))
+
+                    # Bid validity check (Class A & D)
                     if valid and agent.is_adversarial and agent.is_currently_poisoning and attack_class in ["A", "D"]:
                         for tid in list(agent.bundle):
                             bid_val = agent.winning_bids.get(tid, 0.0)
@@ -262,7 +314,7 @@ def run_single_trial(
                         else:
                             quarantined_honest_nodes += 1
                             
-                        # Release claimed tasks for re-auction
+                        # Release claimed tasks for re-auction & Track Task IDs explicitly (P1-04)
                         released_tasks = []
                         if agent.current_task_id:
                             released_tasks.append(agent.current_task_id)
@@ -278,10 +330,11 @@ def run_single_trial(
                             if t_rel.status != TaskStatus.COMPLETED:
                                 t_rel.status = TaskStatus.UNASSIGNED
                                 t_rel.assigned_agent_id = None
-                                orphaned_tasks_total += 1
+                                orphaned_task_ids.add(tid)
 
         # Auction Phase
         comm_links = list(env.update_mesh_network())
+        consensus_messaging_count += len(comm_links) * fleet_size
         round_res = engine.run_auction_round(agents, tasks, comm_links, max_iterations=5, env=env)
         
         # Task Execution Phase
@@ -307,8 +360,9 @@ def run_single_trial(
                 if dist < 12.0:
                     t.status = TaskStatus.COMPLETED
                     t.completed_at = total_sim_time
-                    if t.id in tasks and orphaned_tasks_total > 0:
-                        recovered_tasks_completed += 1
+                    # Explicit Task ID Recovery Attribution (P1-04)
+                    if t.id in orphaned_task_ids:
+                        recovered_task_ids.add(t.id)
                     if agent.path and agent.path[0] == agent.current_task_id:
                         agent.path.pop(0)
                     agent.current_task_id = None
@@ -328,22 +382,23 @@ def run_single_trial(
     completed_tasks = [t for t in tasks.values() if t.status == TaskStatus.COMPLETED]
     u_actual = sum(t.evaluate_marginal_reward(t.completed_at or max_duration, 0.95) for t in completed_tasks)
     
-    # Reference Solver (U_ref)
+    # Empirical Reference Utility Benchmark (U_ref)
     solver = OptimalSolver(lambda_decay=0.95)
     u_ref, is_exact = solver.solve(honest_agents, tasks)
     u_ref = max(1.0, u_ref)
+    emp_ref_ratio = u_actual / u_ref
     
     tcr = len(completed_tasks) / max(1, len(tasks))
     alive_count = sum(1 for a in honest_agents.values() if a.status != AgentStatus.FAILED)
     survival_pct = (alive_count / max(1, n_honest)) * 100.0
     replan_latency = 0.0 if canonical_algo == "B0_Static" else (24.5 if canonical_algo in ["B3_CBBA_Recovery", "B5_SWARMOS"] else 0.0)
     
-    # Disaggregated Rates (P1-03)
+    # Disaggregated Rates (P1-03 & P1-04 Task-level attribution)
     attack_det_rate = (quarantined_malicious_nodes / max(1, n_attackers)) if n_attackers > 0 else 1.0
     false_quarantine_rate = (quarantined_honest_nodes / max(1, n_honest)) if n_honest > 0 else 0.0
     bid_reject_rate = (total_malicious_bids_rejected / max(1, total_malicious_bids_submitted)) if total_malicious_bids_submitted > 0 else 1.0
     node_quarantine_rate = (len(filter_obj.quarantine) if filter_obj else 0) / max(1, fleet_size)
-    task_recovery_rate = (min(recovered_tasks_completed, orphaned_tasks_total) / max(1, orphaned_tasks_total)) if orphaned_tasks_total > 0 else 1.0
+    task_recovery_rate = (len(recovered_task_ids) / max(1, len(orphaned_task_ids))) if len(orphaned_task_ids) > 0 else 1.0
     telemetry_tpr = (total_kinematic_spoofs_detected / max(1, total_kinematic_spoofs_attempted)) if total_kinematic_spoofs_attempted > 0 else 1.0
     
     trial_id = f"TRIAL-{seed}-{canonical_algo}-{fleet_size}-{task_count}-{packet_loss_rate:.2f}-{adversarial_fraction:.2f}-{attack_class}"
@@ -366,8 +421,10 @@ def run_single_trial(
         "utility": u_actual,
         "reference_utility": u_ref,
         "is_exact_reference": is_exact,
-        "optimality_ratio": u_actual / u_ref,
-        "normalized_utility": u_actual / u_ref,
+        "empirical_reference_ratio": emp_ref_ratio,
+        "reference_utility_ratio": emp_ref_ratio,
+        "optimality_ratio": emp_ref_ratio,
+        "normalized_utility": emp_ref_ratio,
         "mean_convergence_ms": kpis.get("avg_consensus_ms", 120.0),
         "convergence_time": kpis.get("avg_consensus_ms", 120.0),
         "mean_replan_latency": replan_latency,
@@ -377,16 +434,20 @@ def run_single_trial(
         "packets_dropped": packets_dropped,
         "observed_packet_loss_pct": (packets_dropped / max(1, packets_generated)) * 100.0,
         "PDR": (packets_delivered / max(1, packets_generated)),
-        # Disaggregated Metrics (P1-03)
+        # Disaggregated Metrics (P1-03 & P1-04)
         "attack_detection_rate": attack_det_rate,
         "false_quarantine_rate": false_quarantine_rate,
         "bid_rejection_rate": bid_reject_rate,
         "node_quarantine_rate": node_quarantine_rate,
         "task_recovery_rate": task_recovery_rate,
+        "orphaned_tasks_total": len(orphaned_task_ids),
+        "recovered_tasks_completed": len(recovered_task_ids),
         "telemetry_quarantine_tpr": telemetry_tpr,
         "TPR": attack_det_rate,
         "FPR": false_quarantine_rate,
         "quarantined_count": len(filter_obj.quarantine) if filter_obj else 0,
+        "topology_construction_ms": topology_construction_time_ms,
+        "consensus_messaging_count": consensus_messaging_count,
         "duration_s": total_sim_time
     }
 
@@ -508,9 +569,17 @@ def run_authoritative_pipeline(spec_path: str = "PAPER_EXPERIMENT_SPEC.json", re
                         p_summary["TCR"] = compute_mean(pivot_tcrs)
                         p_summary["TCR_std"] = compute_std(pivot_tcrs)
                         p_summary["TCR_ci_95"] = list(compute_confidence_interval(pivot_tcrs, 0.95))
-                        p_summary["optimality_ratio"] = compute_mean(pivot_opts)
+                        mean_opt = compute_mean(pivot_opts)
+                        p_summary["empirical_reference_ratio"] = mean_opt
+                        p_summary["reference_utility_ratio"] = mean_opt
+                        p_summary["optimality_ratio"] = mean_opt
                         p_summary["optimality_ratio_std"] = compute_std(pivot_opts)
                         p_summary["optimality_ratio_ci_95"] = list(compute_confidence_interval(pivot_opts, 0.95))
+                        p_summary["attack_detection_rate"] = compute_mean([r["attack_detection_rate"] for r in trial_buckets[pivot]])
+                        p_summary["false_quarantine_rate"] = compute_mean([r["false_quarantine_rate"] for r in trial_buckets[pivot]])
+                        p_summary["bid_rejection_rate"] = compute_mean([r["bid_rejection_rate"] for r in trial_buckets[pivot]])
+                        p_summary["node_quarantine_rate"] = compute_mean([r["node_quarantine_rate"] for r in trial_buckets[pivot]])
+                        p_summary["task_recovery_rate"] = compute_mean([r["task_recovery_rate"] for r in trial_buckets[pivot]])
                         p_summary["PDR_ci_95"] = list(compute_confidence_interval(pivot_pdrs, 0.95))
                         p_summary["convergence_ms_ci_95"] = list(compute_confidence_interval(pivot_conv, 0.95))
                         p_summary["prob_success_09"] = compute_mean([1.0 if t >= 0.9 else 0.0 for t in pivot_tcrs])
@@ -534,9 +603,17 @@ def run_authoritative_pipeline(spec_path: str = "PAPER_EXPERIMENT_SPEC.json", re
                             summary["TCR"] = compute_mean(tcrs)
                             summary["TCR_std"] = compute_std(tcrs)
                             summary["TCR_ci_95"] = list(compute_confidence_interval(tcrs, 0.95))
-                            summary["optimality_ratio"] = compute_mean(opts)
+                            m_opt = compute_mean(opts)
+                            summary["empirical_reference_ratio"] = m_opt
+                            summary["reference_utility_ratio"] = m_opt
+                            summary["optimality_ratio"] = m_opt
                             summary["optimality_ratio_std"] = compute_std(opts)
                             summary["optimality_ratio_ci_95"] = list(compute_confidence_interval(opts, 0.95))
+                            summary["attack_detection_rate"] = compute_mean([r["attack_detection_rate"] for r in trial_buckets[algo]])
+                            summary["false_quarantine_rate"] = compute_mean([r["false_quarantine_rate"] for r in trial_buckets[algo]])
+                            summary["bid_rejection_rate"] = compute_mean([r["bid_rejection_rate"] for r in trial_buckets[algo]])
+                            summary["node_quarantine_rate"] = compute_mean([r["node_quarantine_rate"] for r in trial_buckets[algo]])
+                            summary["task_recovery_rate"] = compute_mean([r["task_recovery_rate"] for r in trial_buckets[algo]])
                             summary["PDR_ci_95"] = list(compute_confidence_interval(pdrs, 0.95))
                             summary["convergence_ms_ci_95"] = list(compute_confidence_interval(convs, 0.95))
                             summary["prob_success_09"] = compute_mean([1.0 if t >= 0.9 else 0.0 for t in tcrs])

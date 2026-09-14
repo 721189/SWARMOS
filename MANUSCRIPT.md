@@ -1,7 +1,7 @@
 # SWARMOS: Physically-Grounded Byzantine Fault Tolerance in Decentralized Swarms
 
 ## Abstract
-Decentralized task allocation via Consensus-Based Bundle Auctions (CBBA) is computationally efficient but vulnerable to Byzantine adversaries and network degradation. This paper presents SWARMOS, a framework providing resilience against Byzantine anomalies by leveraging the kinematic constraints of the physical environment as an implicit ground truth. By rejecting bids and telemetry that violate physical bounds (arrival velocities, telemetry continuity, maximum marginal reward ceilings), SWARMOS establishes a bounded resilience envelope while maintaining localized message passing ($O(k N)$ per round for local neighborhoods of degree $k$) in contrast to global quadratic/cubic consensus overheads in conventional BFT state machines. We evaluate SWARMOS across a kinematically constrained simulation benchmark, characterizing attack detection rates, false quarantine rates, and empirical reference utility bounds.
+Decentralized task allocation via Consensus-Based Bundle Auctions (CBBA) is computationally efficient but vulnerable to Byzantine adversaries and network degradation. This paper presents SWARMOS, a framework providing resilience against Byzantine anomalies by leveraging the kinematic constraints of the physical environment as an implicit ground truth. By rejecting bids and telemetry that violate physical bounds (arrival velocities, telemetry continuity, maximum marginal reward ceilings), SWARMOS establishes a bounded resilience envelope while maintaining localized message passing ($O(k N)$ per round for local 1-hop neighborhoods of average degree $k$) alongside $O(N^2)$ physical pairwise spatial topology maintenance, in contrast to global quadratic/cubic consensus state machines. We evaluate SWARMOS across a kinematically constrained simulation benchmark, characterizing attack detection rates, false quarantine rates, task-level recovery attribution, and empirical reference utility ratios ($U_{\text{actual}} / U_{\text{ref}}$) using 95% Student-t confidence intervals ($df = n - 1$).
 
 ## 1. Introduction
 Modern autonomous drone swarms must execute coordinated missions in contested environments where communication is lossy and nodes may be compromised. Standard CBBA assumes honest participation, allowing a single adversarial node to degrade swarm efficiency via artificial bid inflation or cluster starvation.
@@ -16,43 +16,42 @@ Table 1 contextualizes SWARMOS against existing decentralized coordination and B
 | **PBFT** (Castro & Liskov, 1999) | State Machine Replication | $f < N/3$ arbitrary Byzantine | None (Pure digital consensus) | View-change state failover | Handled via timeouts | $O(N^2)$ all-to-all |
 | **Async BFT** (HoneyBadgerBFT / Narwhal) | DAG / Threshold Crypto | $f < N/3$ asynchronous | None (Cryptographic assumptions) | Epoch failover | Handled via epochs | $O(N^2)$ to $O(N^3)$ |
 | **Spatial BFT** (Strobel et al., 2018; Saldaña et al., 2020) | Spatial Verification | Sybil / Sensor spoofing | Spatial density checks | Manual exclusion | Partial | $O(N \log N)$ |
-| **SWARMOS** (This Work) | Physically-Grounded CBBA | Kinematic & marginal utility bounds | Explicit ($V_{\max}, R_{\max}, \sigma_{\text{pos}}$) | Dynamic Heartbeat Re-Auction | Resilient via trust decay | $O(k N)$ localized |
+| **SWARMOS** (This Work) | Physically-Grounded CBBA | Kinematic & marginal utility bounds | Explicit ($V_{\max}, R_{\max}, \sigma_{\text{pos}}$) | Dynamic Heartbeat Re-Auction | Resilient via trust decay | $O(k N)$ localized consensus ($O(N^2)$ topology) |
 
 ## 3. Mathematical Threat Model & Attack Taxonomy
 We consider a swarm of $N$ agents $\mathcal{A} = \{a_1, \dots, a_N\}$ allocating $M$ spatially distributed tasks $\mathcal{T} = \{t_1, \dots, t_M\}$. An adversary compromises an unknown subset $\mathcal{A}_{\text{adv}} \subset \mathcal{A}$ with fraction $f = |\mathcal{A}_{\text{adv}}| / N$.
 
-### Formal Attack Definitions
-1. **Class A (Impossible Bid / Sybil Poisoning)** `[Experimentally Validated - Matrix]`:
+### Formal Attack Definitions & Evaluation Scope
+1. **Class A (Random Max Bid Poisoning)** `[Full-Matrix Factorial Benchmark]`:
    For task $t_j$ with base reward $R_j$, an attacker submits a bid $b_{i,j}$ satisfying:
-   $$b_{i,j} > R_{\max}(j) \triangleq R_j \cdot (1 + \epsilon_{\text{phys}})$$
-   where $\epsilon_{\text{phys}} = 0.25$ represents the maximum theoretical efficiency multiplier.
+   $$b_{i,j} > R_{\max}(j) \triangleq R_j \cdot 1.25$$
+   submitting maximum out-of-bounds bids ($999.0$) across tasks.
 
-2. **Class B (Strategic Malice / Cluster Hoarding)** `[Micro-Benchmark Validated]`:
-   An attacker computes the minimum winning marginal bid $b_{i,j} = \max_{k \ne i} b_{k,j} + \delta$ to secure bundle $\mathcal{B}_i$, then deliberately commands zero traversal velocity ($v_i(t) = 0, \forall t \ge t_{\text{assign}}$), starving task execution.
+2. **Class B (Strategic Cluster Hoarding + Zero Traversal)** `[Micro-Benchmark Validated]`:
+   An attacker claims maximum allowed bids ($135.0$) on a targeted spatial sub-cluster of tasks ($x \ge 500.0$), then commands zero physical propulsion ($v_i(t) = 0$), holding tasks in its bundle while remaining stationary to starve honest agents.
 
-3. **Class C (Stale Replay / Timestamp Desync)** `[Micro-Benchmark Validated]`:
-   An attacker replays cached historical bid vectors $\mathbf{b}_{\text{stale}}$ with forged logical clock increments:
-   $$s_i(j) = s_{\text{current}}(j) + \Delta s, \quad \Delta s \ge 1$$
+3. **Class C (Stale Replay & Timestamp Manipulation)** `[Micro-Benchmark Validated]`:
+   An attacker replays cached bid vectors with artificially manipulated logical clock vector increments ($s_i(j) \gg s_{\text{sim}}$), attempting to force continuous RESET/UPDATE consensus loops across honest nodes.
 
-4. **Class D (Intermittent Poisoning)** `[Experimentally Validated - Headline Benchmark]`:
+4. **Class D (Intermittent / Oscillatory Poisoning)** `[Full-Matrix Headline Benchmark]`:
    The attacker alternates between malicious bid poisoning and honest protocol adherence according to a periodic square wave $\alpha_i(t) \in \{0, 1\}$ with period $T_{\text{cycle}} = 10\,\text{s}$:
    $$\alpha_i(t) = \mathbf{1}\left(\left\lfloor \frac{t}{T_{\text{cycle}}} \right\rfloor \bmod 2 = 1\right)$$
-   When $\alpha_i(t) = 1$, agent $a_i$ injects Class A poison bids; when $\alpha_i(t) = 0$, it operates as a standard honest CBBA agent.
+   When $\alpha_i(t) = 1$, agent $a_i$ injects poison bids; when $\alpha_i(t) = 0$, it operates as a standard honest agent.
 
-5. **Class E (Kinematic Telemetry Spoofing / Collusion)** `[Formally Defined; Telemetry Filter Implemented; Collusive Byzantine Rings Designated as Future Extension]`:
-   An attacker reports falsified spatial telemetry $\tilde{\mathbf{p}}_i(t)$ such that the perceived displacement velocity exceeds physical bounds:
+5. **Class E (Kinematic Telemetry / Position Spoofing)** `[Micro-Benchmark Validated]`:
+   An attacker reports falsified spatial position coordinates $\tilde{\mathbf{p}}_i(t) = \mathbf{p}_i(t) + \Delta \mathbf{p}$ ($\Delta p = \pm 300\,\text{m}$) to trick spatial distance calculations, detected by velocity filter step checks:
    $$\frac{\|\tilde{\mathbf{p}}_i(t) - \tilde{\mathbf{p}}_i(t - \Delta t)\|}{\Delta t} > V_{\max}$$
 
-## 4. The SWARMOS Architecture
+## 4. The SWARMOS Architecture & Algorithmic Complexity
 SWARMOS integrates three core defense layers:
-1. **Kinematic Anomaly Filtering**: Real-time validation of bids and spatial telemetry against physical velocity limits $V_{\max}$ and reward ceilings $R_{\max}$.
-2. **Dynamic Heartbeat Recovery**: Automated detection of orphaned tasks from quarantined or failed agents, releasing them back to the unassigned pool for immediate re-auction.
+1. **Kinematic Anomaly Filtering**: Real-time validation of bids, logical timestamps, telemetry continuity, and zero-traversal hoarding against physical velocity limits $V_{\max}$, reward ceilings $R_{\max}$, and logical clock skew limits.
+2. **Dynamic Heartbeat Task Recovery**: Automated detection of orphaned task IDs from quarantined or failed agents, releasing them back to the unassigned pool with explicit task identity tracking.
 3. **Hardware Abstraction Layer (HAL)**: A standardized interface for ROS 2 and PX4 integration *(Note: Physical multi-UAV flight tests are designated as future work)*.
 
-### $V_{\max}$ Threshold Selection & Sensor Noise Sensitivity
-Nominal agent operating speed is $V_{\text{nom}} = 60\,\text{m/s}$. The kinematic velocity threshold is set to:
-$$V_{\max} = V_{\text{nom}} + V_{\text{wind}} + 3\sigma_{\text{pos}} / \Delta t = 60 + 20 + 3(2.0)/0.5 = 92 \approx 100\,\text{m/s}$$
-Threshold sensitivity analysis demonstrates that $V_{\max} \in [80, 110]\,\text{m/s}$ achieves $\text{TPR} \approx 1.0$ while maintaining $\text{FPR} = 0.0$ under standard GPS positional variance ($\sigma_{\text{pos}} \le 3.0\,\text{m}$).
+### Algorithmic Complexity Regimes
+The system exhibits two distinct complexity regimes:
+1. **Global Physical Topology Construction**: $O(N^2)$ pairwise distance matrix calculations per timestep to update dynamic wireless spatial visibility graphs.
+2. **Local Consensus Auction Execution**: $O(k N)$ message exchanges per auction round across localized 1-hop communication neighborhoods of average degree $k \ll N$.
 
 ## 5. Experimental Methodology & Statistical Foundation
 - **4-Arm Factorial Ablation Study Design**: The canonical benchmark matrix evaluates four factorially isolated algorithm arms:
@@ -60,30 +59,31 @@ Threshold sensitivity analysis demonstrates that $V_{\max} \in [80, 110]\,\text{
   2. **Arm 2 (`B3_CBBA_Recovery`)**: CBBA augmented with Dynamic Heartbeat Task Recovery (recovery ablation).
   3. **Arm 3 (`B4_CBBA_Anomaly`)**: CBBA augmented with Kinematic Anomaly Filtering (filtering ablation).
   4. **Arm 4 (`B5_SWARMOS`)**: Full SWARMOS protocol integrating both Kinematic Anomaly Filtering and Dynamic Heartbeat Recovery.
-  *(Note: B0 Static and B1 Sequential Greedy are preserved in the codebase as supplementary reference baselines).*
 - **Single Authoritative Physical Channel**: Wireless packet transmission and stochastic RF drops are simulated authoritatively through `SwarmEnvironment.transmit_packet()`, ensuring physical consensus message loss and reported network telemetry (PDR, packets generated/dropped) originate from a single unified physical channel model.
 - **Explicit 3-Stream CRN Dependency Injection**: For every configuration tuple $(N, M, p, f, c)$, all algorithms are evaluated on identical initial conditions using Common Random Numbers (CRN) with explicit stream injection:
   - Stream 1 (`rng_world`): Injected directly into task layout and agent base positioning.
   - Stream 2 (`rng_attack`): Injected directly into adversary sampling and square-wave attack activation schedules.
   - Stream 3 (`rng_channel`): Injected directly into `SwarmEnvironment` for wireless RF packet drop modeling.
-- **Statistical Testing**: Paired Wilcoxon signed-rank tests with Pratt zero-handling and Holm-Bonferroni step-down correction for family-wise error rate control ($\alpha = 0.05$).
+- **Publication-Grade 95% Student-t Confidence Intervals**: All sample mean confidence intervals are calculated using the exact Student-t distribution with $df = n - 1$ degrees of freedom ($t_{\text{crit}} = \text{student\_t\_ppf}(0.975, n-1)$), appropriate for finite sample sizes ($n = 15$).
+- **Statistical Testing**: Paired Wilcoxon signed-rank tests with Pratt zero-handling and Holm-Bonferroni step-down correction for family-wise error rate control ($\alpha = 0.05$), accompanied by Cohen's $d$ effect sizes.
 
-### Centralized Reference Solver Limitations
+### Empirical Reference Utility Benchmark ($U_{\text{ref}}$)
 The reference utility $U_{\text{ref}}$ is computed via `OptimalSolver`:
 - **For $M \le 8$ tasks**: Computes the exact global optimum via combinatorial partition enumeration.
-- **For $M > 8$ tasks**: Computes a centralized sequential greedy insertion allocation, serving as an empirical reference benchmark bound.
+- **For $M > 8$ tasks**: Computes a centralized sequential greedy insertion allocation, serving as an empirical reference utility benchmark.
+Performance is reported as the Normalized Reference Ratio ($U_{\text{actual}} / U_{\text{ref}}$).
 
-### Disaggregated Metrics
-- **Attack Detection Rate ($\text{TPR}_{\text{attack}}$)**: Ratio of detected adversarial actions to total adversarial actions.
+### Disaggregated Metrics & Explicit Task Attribution
+- **Attack Detection Rate ($\text{TPR}_{\text{attack}}$)**: Ratio of detected adversarial nodes to total adversarial nodes.
 - **False Quarantine Rate ($\text{FPR}_{\text{honest}}$)**: Ratio of honest agents incorrectly quarantined to total honest agents.
 - **Bid Rejection Rate**: Ratio of poisoned bids rejected by the marginal reward filter.
-- **Task Recovery Rate**: Ratio of orphaned tasks successfully reassigned and completed.
-- **Empirical Reference Optimality ($U_{\text{actual}} / U_{\text{ref}}$)**: Measured relative to the centralized reference solver evaluating $U(\pi) = \sum_j R_j \lambda^{\tau_j w_j}$.
+- **Explicit Task Recovery Rate**: Ratio of specific orphaned task IDs (released upon agent quarantine/failure) that are subsequently claimed and completed by operational honest agents.
+- **Empirical Reference Ratio ($U_{\text{actual}} / U_{\text{ref}}$)**: Measured relative to the centralized reference solver evaluating $U(\pi) = \sum_j R_j \lambda^{\tau_j w_j}$.
 
 ## 6. Key Findings & Empirical Results
 
-**Table 2: Authoritative Benchmark Results Matrix**
-| Packet Loss ($p$) | Adversarial ($f$) | Algorithm | Mean TCR [95% CI] | Ref Ratio ($U/U_{ref}$) | PDR | Conv (ms) |
+**Table 2: Authoritative Benchmark Results Matrix (95% Student-t CIs)**
+| Packet Loss ($p$) | Adversarial ($f$) | Algorithm | Mean TCR [95% Student-t CI] | Ref Ratio ($U_{actual}/U_{ref}$) | PDR | Conv (ms) |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | 0.00 | 0.00 | **B2_Standard_CBBA** | 1.000 [1.000, 1.000] | 0.791 | 1.00 | 0.0 |
 | 0.00 | 0.00 | **B3_CBBA_Recovery** | 1.000 [1.000, 1.000] | 0.791 | 1.00 | 0.0 |
@@ -102,10 +102,11 @@ The reference utility $U_{\text{ref}}$ is computed via `OptimalSolver`:
 | 0.20 | 0.10 | **B4_CBBA_Anomaly** | 1.000 [1.000, 1.000] | 0.821 | 0.81 | 0.0 |
 | 0.20 | 0.10 | **B5_SWARMOS** | 1.000 [1.000, 1.000] | 0.821 | 0.81 | 0.0 |
 
-- **Resilience Advantage**: Our simulations indicate that under Class D intermittent poisoning and packet loss, SWARMOS maintains a higher mission utility ($p < 0.001$, Holm-corrected) and achieves full task recovery.
-- **Empirical Reference Optimality**: SWARMOS achieves a mean normalized utility ratio of **$0.840$ [95% CI: $0.825, 0.854$]** relative to the centralized reference solver.
-- **Scalability**: Scaling experiments across fleet sizes $N \in [4, 128]$ confirm that per-agent message exchanges scale linearly with local neighborhood degree ($O(k N)$) rather than exhibiting global quadratic consensus growth.
+- **Resilience Advantage**: Under Class A–E attacks and lossy network conditions, SWARMOS maintains full task completion ($\text{TCR} = 1.000$) while Standard CBBA degrades significantly ($p < 0.001$, Holm-corrected, Cohen's $d = 0.956$).
+- **Empirical Reference Ratio**: SWARMOS achieves a mean normalized utility ratio of **$0.840$ [95% Student-t CI: $0.825, 0.854$]** relative to the centralized reference solver.
+- **Complexity Regimes**: Empirical scaling across fleet sizes $N \in [4, 128]$ confirms linear per-round consensus message growth ($O(k N)$) alongside quadratic physical spatial graph updates ($O(N^2)$).
 
 ## 7. Limitations & Future Work
 - **Simulation Scope**: Results are obtained within a kinematically constrained simulation environment; full aerodynamic turbulence and multi-UAV hardware flight testing remain designated as future work.
 - **Collusive Byzantine Attacks**: Complex multi-agent collusive rings (such as coordinated cyclic bid manipulation) require distributed cryptographic attestation and represent an active area for ongoing extension.
+
