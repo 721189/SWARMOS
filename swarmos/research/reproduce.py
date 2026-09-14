@@ -5,6 +5,10 @@ import uuid
 import sys
 import os
 
+# Ensure swarmos module root is in sys.path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+sys.path.insert(0, os.getcwd())
+
 from swarmos.nebius_jobs.experiments import run_single_baseline_trial, run_experiment_matrix
 
 def main():
@@ -22,9 +26,12 @@ def main():
     experiment_id = str(uuid.uuid4())
     print(f"Starting SWARMOS Research Experiment. ID: {experiment_id}")
     
+    out_dir = "swarmos/research/raw_results"
+    os.makedirs(out_dir, exist_ok=True)
+    
     if args.matrix or args.reduced:
         results = run_experiment_matrix(reduced_benchmark=args.reduced)
-        out_path = f"swarmos/research/raw_results/matrix_{experiment_id}.json"
+        out_path = f"{out_dir}/matrix_{experiment_id}.json"
         with open(out_path, "w") as f:
             json.dump(results, f, indent=2)
         print(f"Matrix complete. Results saved to {out_path}")
@@ -39,7 +46,7 @@ def main():
             algorithm=args.algo
         )
         print(json.dumps(res, indent=2))
-        out_path = f"swarmos/research/raw_results/single_{experiment_id}.json"
+        out_path = f"{out_dir}/single_{experiment_id}.json"
         with open(out_path, "w") as f:
             json.dump(res, f, indent=2)
         print(f"Single trial complete. Results saved to {out_path}")

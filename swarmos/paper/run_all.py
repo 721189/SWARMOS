@@ -1,7 +1,13 @@
 import os
+import sys
 import json
 import time
 from datetime import datetime
+
+# Ensure swarmos module root is in sys.path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+sys.path.insert(0, os.getcwd())
+
 from swarmos.utils.logger import logger
 from swarmos.nebius_jobs.experiments import run_authoritative_pipeline
 from swarmos.paper.verify_claims import verify_paper_claims
