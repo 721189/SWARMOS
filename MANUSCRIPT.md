@@ -55,11 +55,17 @@ $$V_{\max} = V_{\text{nom}} + V_{\text{wind}} + 3\sigma_{\text{pos}} / \Delta t 
 Threshold sensitivity analysis demonstrates that $V_{\max} \in [80, 110]\,\text{m/s}$ achieves $\text{TPR} \approx 1.0$ while maintaining $\text{FPR} = 0.0$ under standard GPS positional variance ($\sigma_{\text{pos}} \le 3.0\,\text{m}$).
 
 ## 5. Experimental Methodology & Statistical Foundation
-- **Paired Statistical Unit**: For every configuration tuple $(N, M, p, f, c)$, all algorithms are evaluated on identical world geometry, task locations, and agent placements using Common Random Numbers (CRN).
-- **RNG Stream Separation**:
-  - Stream 1 (`rng_world`): Deterministic task and agent placement.
-  - Stream 2 (`rng_attack`): Adversary identity selection and poisoning schedules.
-  - Stream 3 (`rng_channel`): Wireless packet erasure channel modeling.
+- **4-Arm Factorial Ablation Study Design**: The canonical benchmark matrix evaluates four factorially isolated algorithm arms:
+  1. **Arm 1 (`B2_Standard_CBBA`)**: Standard baseline CBBA without anomaly filtering or dynamic task recovery.
+  2. **Arm 2 (`B3_CBBA_Recovery`)**: CBBA augmented with Dynamic Heartbeat Task Recovery (recovery ablation).
+  3. **Arm 3 (`B4_CBBA_Anomaly`)**: CBBA augmented with Kinematic Anomaly Filtering (filtering ablation).
+  4. **Arm 4 (`B5_SWARMOS`)**: Full SWARMOS protocol integrating both Kinematic Anomaly Filtering and Dynamic Heartbeat Recovery.
+  *(Note: B0 Static and B1 Sequential Greedy are preserved in the codebase as supplementary reference baselines).*
+- **Single Authoritative Physical Channel**: Wireless packet transmission and stochastic RF drops are simulated authoritatively through `SwarmEnvironment.transmit_packet()`, ensuring physical consensus message loss and reported network telemetry (PDR, packets generated/dropped) originate from a single unified physical channel model.
+- **Explicit 3-Stream CRN Dependency Injection**: For every configuration tuple $(N, M, p, f, c)$, all algorithms are evaluated on identical initial conditions using Common Random Numbers (CRN) with explicit stream injection:
+  - Stream 1 (`rng_world`): Injected directly into task layout and agent base positioning.
+  - Stream 2 (`rng_attack`): Injected directly into adversary sampling and square-wave attack activation schedules.
+  - Stream 3 (`rng_channel`): Injected directly into `SwarmEnvironment` for wireless RF packet drop modeling.
 - **Statistical Testing**: Paired Wilcoxon signed-rank tests with Pratt zero-handling and Holm-Bonferroni step-down correction for family-wise error rate control ($\alpha = 0.05$).
 
 ### Centralized Reference Solver Limitations

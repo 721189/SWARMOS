@@ -15,12 +15,17 @@ Publication Rigor Features (P0 & P1 Compliant):
 
 import json
 import os
+import sys
 import random
 import time
 import math
 import hashlib
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Tuple, Optional
+
+# Ensure swarmos module root is in sys.path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+sys.path.insert(0, os.getcwd())
 
 from swarmos.utils.logger import logger
 from swarmos.swarm_engine.agents import Agent, AgentStatus
@@ -62,11 +67,11 @@ ALGORITHM_MAP = {
     "SWARMOS_NoCompiler": "B5_SWARMOS"
 }
 
-def generate_deterministic_tasks(task_count: int, seed: int) -> List[Task]:
+def generate_deterministic_tasks(task_count: int, rng_world: random.Random) -> List[Task]:
     """
     RNG Stream 1: World & Task Layout (Common Random Numbers).
+    Explicitly uses injected rng_world instance.
     """
-    rng_world = random.Random(seed)
     task_types = [TaskType.RECON, TaskType.NEUTRALIZE, TaskType.RESCUE, TaskType.SURVEIL, TaskType.RELAY]
     tasks = []
     for i in range(task_count):
@@ -94,24 +99,27 @@ def run_single_trial(
 ) -> Dict[str, Any]:
     """
     Executes a single end-to-end simulation trial under exact parameter controls and isolated RNG streams.
+    P0-1: Single channel model driven authoritatively by SwarmEnvironment.
+    P0-2: Explicit 3-Stream CRN dependency injection (rng_world, rng_attack, rng_channel).
     """
     canonical_algo = ALGORITHM_MAP.get(baseline_id, "B5_SWARMOS")
     
-    # Independent RNG Streams (P1-09)
-    rng_world = random.Random(seed)
-    rng_attack = random.Random(seed + 1000)
-    rng_channel = random.Random(seed + 2000)
+    # Explicit 3-Stream CRN Architecture (P0-2)
+    rng_world = random.Random(seed)            # Stream 1: World geometry & task layout
+    rng_attack = random.Random(seed + 1000)    # Stream 2: Adversary sampling & attack schedule
+    rng_channel = random.Random(seed + 2000)   # Stream 3: Wireless RF packet drop modeling
     
-    # 1. Environment & Setup
+    # 1. Environment (Stream 3 injected into physical channel)
     env = SwarmEnvironment(
         width=1200,
         height=800,
         comm_range=comm_range,
         packet_loss_rate=packet_loss_rate,
-        seed=seed
+        seed=seed,
+        rng_channel=rng_channel
     )
     
-    # 2. Agents
+    # 2. Agents (Stream 1 for base placement)
     agents: Dict[str, Agent] = {}
     for i in range(fleet_size):
         aid = f"A{i+1}"
@@ -119,8 +127,8 @@ def run_single_trial(
         env.add_agent(agent)
         agents[aid] = agent
         
-    # 3. Tasks
-    tasks_list = generate_deterministic_tasks(task_count, seed)
+    # 3. Tasks (Stream 1 injected)
+    tasks_list = generate_deterministic_tasks(task_count, rng_world)
     tasks = {t.id: t for t in tasks_list}
     for t in tasks_list:
         env.add_task(t)
@@ -276,15 +284,6 @@ def run_single_trial(
         comm_links = list(env.update_mesh_network())
         round_res = engine.run_auction_round(agents, tasks, comm_links, max_iterations=5, env=env)
         
-        # Message / Packet accounting via rng_channel
-        n_links = len(comm_links)
-        round_pkts = n_links * 2
-        dropped_pkts = sum(1 for _ in range(round_pkts) if rng_channel.random() < packet_loss_rate)
-        delivered_pkts = round_pkts - dropped_pkts
-        packets_generated += round_pkts
-        packets_dropped += dropped_pkts
-        packets_delivered += delivered_pkts
-        
         # Task Execution Phase
         for agent in agents.values():
             if agent.status == AgentStatus.FAILED:
@@ -319,6 +318,10 @@ def run_single_trial(
             break
 
     # 8. Post-Trial Analysis & Metrics
+    packets_generated = env.packets_generated
+    packets_delivered = env.packets_delivered
+    packets_dropped = env.packets_dropped
+
     kpis = metrics.compute_summary_kpis(agents, tasks, env=env)
     honest_agents = {aid: a for aid, a in agents.items() if not a.is_adversarial}
     n_honest = len(honest_agents)

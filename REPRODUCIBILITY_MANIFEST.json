@@ -2,13 +2,15 @@
   "manifest_version": "4.2.0",
   "project_name": "SWARMOS",
   "single_source_of_truth_spec": "PAPER_EXPERIMENT_SPEC.json",
+  "experimental_design": "4-Arm Factorial Ablation Study (B2: Standard, B3: Recovery-Only, B4: Filtering-Only, B5: SWARMOS)",
   "provenance": {
     "engine": "SWARMOS Authoritative Simulation Core",
     "runtime": "Python 3.11 / Node.js 20 LTS",
+    "channel_model": "Single authoritative physical channel driven by SwarmEnvironment.transmit_packet()",
     "rng_streams": {
-      "stream_1_world": "Deterministic seed for geometry, task locations, agent bases",
-      "stream_2_attack": "seed + 1000 for adversary sampling and poisoning square-wave activation",
-      "stream_3_channel": "seed + 2000 for packet loss erasure modeling"
+      "stream_1_world": "Injected rng_world (seed) for geometry, task locations, agent bases",
+      "stream_2_attack": "Injected rng_attack (seed + 1000) for adversary sampling and poisoning square-wave activation",
+      "stream_3_channel": "Injected rng_channel (seed + 2000) for SwarmEnvironment wireless RF packet drop modeling"
     },
     "paired_unit": "(seed, fleet_size, task_count, packet_loss, adversarial_fraction, attack_class)",
     "hypothesis_testing": {

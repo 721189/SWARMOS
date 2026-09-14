@@ -46,13 +46,14 @@ class SwarmEnvironment:
         height: int = 800,
         comm_range: float = 350.0,
         packet_loss_rate: float = 0.0,
-        seed: int = 42
+        seed: int = 42,
+        rng_channel: Optional[random.Random] = None
     ):
         self.width = width
         self.height = height
         self.comm_range = comm_range
         self.packet_loss_rate = packet_loss_rate
-        self.rng = random.Random(seed)
+        self.rng = rng_channel if rng_channel is not None else random.Random(seed)
         
         self.agents: Dict[str, Agent] = {}
         self.tasks: Dict[str, Task] = {}
