@@ -1,4 +1,4 @@
-name: SWARMOS CI Pipeline
+name: SWARMOS CI & Scientific Verification Pipeline
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 
 jobs:
   python-simulation-core:
-    name: Python Simulation Core
+    name: Python Simulation & Scientific Invariant Audit
     runs-on: ubuntu-latest
     steps:
     - name: Checkout Code
@@ -28,13 +28,22 @@ jobs:
       run: |
         python3 -m compileall swarmos/
 
-    - name: Execute Behavioral & Invariant Tests
+    - name: Execute Simulation & Scientific Invariant Tests
       run: |
         PYTHONPATH=. python3 -m unittest discover -s swarmos/tests -p "test_*.py" -v
 
-    - name: Execute Reduced Matrix Audit
+    - name: Execute Reduced Matrix Benchmark
       run: |
         PYTHONPATH=. python3 swarmos/research/reproduce.py --reduced
+
+    - name: Audit Scientific Claims & Story Invariants
+      run: |
+        PYTHONPATH=. python3 swarmos/paper/verify_claims.py
+
+    - name: Execute Scalability & Sensitivity Smoke Tests
+      run: |
+        PYTHONPATH=. python3 swarmos/research/scalability.py
+        PYTHONPATH=. python3 swarmos/research/sensitivity.py
 
   typescript-frontend:
     name: Node.js Frontend & API

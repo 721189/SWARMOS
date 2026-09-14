@@ -2,13 +2,15 @@
 Authoritative SWARMOS Research Simulation & Experiment Engine.
 Strictly driven by PAPER_EXPERIMENT_SPEC.json as the Single Source of Truth.
 
-Publication Rigor Features:
+Publication Rigor Features (P0 & P1 Compliant):
 - Exact 6-Baseline Ladder (B0-B5) with strict ablation isolation.
 - Formal time-discounted objective: U(pi) = sum R_j * lambda^(tau_j * w_j).
 - Centralized Reference Bound (U_ref) with exact solver for N <= 8 and greedy solver for N > 8.
-- Attack Classes A, B, C, D, E with accurate physical and protocol behaviors.
+- Explicit Mathematical Attack Models (Classes A, B, C, D, E) with scope labels.
+- Disaggregated metrics: attack_detection_rate, false_quarantine_rate, bid_rejection_rate, node_quarantine_rate, task_recovery_rate.
+- Independent Common Random Number (CRN) Streams: rng_world, rng_attack, rng_channel.
+- Full 95% Confidence Intervals and Wilcoxon / Holm-Bonferroni hypothesis tests.
 - Complete raw trial audit log preservation (raw_trials.jsonl).
-- Statistical hypothesis testing (paired t-test, Wilcoxon signed-rank, Holm-Bonferroni correction, Cohen's d).
 """
 
 import json
@@ -38,7 +40,7 @@ from swarmos.utils.analysis import (
     holm_correction
 )
 
-ARTIFACT_SCHEMA_VERSION = "4.0.0"
+ARTIFACT_SCHEMA_VERSION = "4.1.0"
 
 ALGORITHM_MAP = {
     "B0_Static": "B0_Static",
@@ -61,16 +63,19 @@ ALGORITHM_MAP = {
 }
 
 def generate_deterministic_tasks(task_count: int, seed: int) -> List[Task]:
-    rng = random.Random(seed)
+    """
+    RNG Stream 1: World & Task Layout (Common Random Numbers).
+    """
+    rng_world = random.Random(seed)
     task_types = [TaskType.RECON, TaskType.NEUTRALIZE, TaskType.RESCUE, TaskType.SURVEIL, TaskType.RELAY]
     tasks = []
     for i in range(task_count):
         t = Task(
             id=f"T{i+1}",
             task_type=task_types[i % len(task_types)],
-            position=(rng.uniform(150, 1050), rng.uniform(150, 650)),
-            base_reward=rng.uniform(80, 120),
-            duration=rng.uniform(4, 6),
+            position=(rng_world.uniform(150, 1050), rng_world.uniform(150, 650)),
+            base_reward=rng_world.uniform(80, 120),
+            duration=rng_world.uniform(4, 6),
             urgency_weight=1.0
         )
         tasks.append(t)
@@ -88,10 +93,14 @@ def run_single_trial(
     failure_mode: str = "nominal"
 ) -> Dict[str, Any]:
     """
-    Executes a single end-to-end simulation trial under exact parameter controls.
+    Executes a single end-to-end simulation trial under exact parameter controls and isolated RNG streams.
     """
     canonical_algo = ALGORITHM_MAP.get(baseline_id, "B5_SWARMOS")
-    rng = random.Random(seed)
+    
+    # Independent RNG Streams (P1-09)
+    rng_world = random.Random(seed)
+    rng_attack = random.Random(seed + 1000)
+    rng_channel = random.Random(seed + 2000)
     
     # 1. Environment & Setup
     env = SwarmEnvironment(
@@ -123,13 +132,13 @@ def run_single_trial(
         for aid in agents:
             filter_obj.register_agent(aid)
 
-    # 5. Exact Adversarial Selection
+    # 5. Exact Adversarial Selection via rng_attack
     n_attackers = 0
     if adversarial_fraction > 0.0:
         n_attackers = max(1, round(adversarial_fraction * fleet_size))
     
     agent_ids = sorted(list(agents.keys()))
-    rng.shuffle(agent_ids)
+    rng_attack.shuffle(agent_ids)
     attackers = set(agent_ids[:n_attackers])
     
     for aid in attackers:
@@ -147,7 +156,7 @@ def run_single_trial(
                     agents[aid].bundle.append(tid)
                     agents[aid].path.append(tid)
 
-    # 6. Failure Modes (e.g. attrition or electronic warfare)
+    # 6. Failure Modes (attrition)
     if failure_mode in ["mild_attrition", "loss_50_catastrophic"]:
         fail_count = 1 if failure_mode == "mild_attrition" else max(1, fleet_size // 2)
         honest_ids = [aid for aid in agent_ids if aid not in attackers]
@@ -155,13 +164,22 @@ def run_single_trial(
             agents[aid].health.propulsion = 0.0
             agents[aid].status = AgentStatus.FAILED
 
-    # 7. Simulation Loop
+    # 7. Simulation Tracking Variables (P1-03 Disaggregated Metrics)
     total_sim_time = 0.0
     dt = 0.5
     max_duration = 50.0
     metrics = SwarmMetricsTracker()
-    tp, fp = 0, 0
-    replan_count = 0
+    
+    # Audit counters
+    total_malicious_bids_submitted = 0
+    total_malicious_bids_rejected = 0
+    total_kinematic_spoofs_attempted = 0
+    total_kinematic_spoofs_detected = 0
+    quarantined_honest_nodes = 0
+    quarantined_malicious_nodes = 0
+    orphaned_tasks_total = 0
+    recovered_tasks_completed = 0
+    
     packets_generated = 0
     packets_delivered = 0
     packets_dropped = 0
@@ -180,6 +198,7 @@ def run_single_trial(
                 is_poison = (int(total_sim_time / 10.0) % 2 == 1)
                 agents[aid].is_currently_poisoning = is_poison
                 if is_poison:
+                    total_malicious_bids_submitted += len(tasks)
                     for tid in tasks:
                         agents[aid].winning_bids[tid] = 999.0
                         agents[aid].winning_agents[tid] = aid
@@ -195,11 +214,12 @@ def run_single_trial(
                             agents[aid].winning_agents[tid] = None
                             agents[aid].winning_bids[tid] = 0.0
             
-            # Class E: Kinematic Telemetry Spoofing (impossible jumps violating v_max)
+            # Class E: Kinematic Telemetry Spoofing
             elif attack_class == "E":
+                total_kinematic_spoofs_attempted += 1
                 agents[aid].position = (
-                    agents[aid].position[0] + rng.choice([-300.0, 300.0]),
-                    agents[aid].position[1] + rng.choice([-300.0, 300.0])
+                    agents[aid].position[0] + rng_attack.choice([-300.0, 300.0]),
+                    agents[aid].position[1] + rng_attack.choice([-300.0, 300.0])
                 )
 
         # Anomaly Filtering & Isolation
@@ -210,6 +230,9 @@ def run_single_trial(
                     valid, reason = filter_obj.validate_telemetry_kinematics(
                         agent.id, agent.position[0], agent.position[1], total_sim_time
                     )
+                    if not valid:
+                        total_kinematic_spoofs_detected += 1
+
                     # Bid validity check
                     if valid and agent.is_adversarial and agent.is_currently_poisoning and attack_class in ["A", "D"]:
                         for tid in list(agent.bundle):
@@ -217,6 +240,7 @@ def run_single_trial(
                             b_valid, _ = filter_obj.validate_bid(agent.id, tid, bid_val, tasks[tid].base_reward)
                             if not b_valid:
                                 valid = False
+                                total_malicious_bids_rejected += 1
                                 reason = f"Poison bid {bid_val:.1f}"
                                 break
 
@@ -224,35 +248,38 @@ def run_single_trial(
                         filter_obj.quarantine.add(agent.id)
                         agent.status = AgentStatus.FAILED
                         agent.health.propulsion = 0.0
+                        
+                        if agent.is_adversarial:
+                            quarantined_malicious_nodes += 1
+                        else:
+                            quarantined_honest_nodes += 1
+                            
                         # Release claimed tasks for re-auction
+                        released_tasks = []
                         if agent.current_task_id:
-                            t_rel = tasks[agent.current_task_id]
-                            if t_rel.status != TaskStatus.COMPLETED:
-                                t_rel.status = TaskStatus.UNASSIGNED
-                                t_rel.assigned_agent_id = None
+                            released_tasks.append(agent.current_task_id)
                             agent.current_task_id = None
                         for tid in agent.bundle:
+                            if tid not in released_tasks:
+                                released_tasks.append(tid)
+                        agent.bundle = []
+                        agent.path = []
+                        
+                        for tid in released_tasks:
                             t_rel = tasks[tid]
                             if t_rel.status != TaskStatus.COMPLETED:
                                 t_rel.status = TaskStatus.UNASSIGNED
                                 t_rel.assigned_agent_id = None
-                        agent.bundle = []
-                        agent.path = []
-                        
-                        if agent.is_adversarial:
-                            tp += 1
-                        else:
-                            fp += 1
+                                orphaned_tasks_total += 1
 
         # Auction Phase
         comm_links = list(env.update_mesh_network())
         round_res = engine.run_auction_round(agents, tasks, comm_links, max_iterations=5, env=env)
         
-        # Message / Packet accounting
+        # Message / Packet accounting via rng_channel
         n_links = len(comm_links)
-        n_agents_active = sum(1 for a in agents.values() if a.status != AgentStatus.FAILED)
         round_pkts = n_links * 2
-        dropped_pkts = int(round_pkts * packet_loss_rate)
+        dropped_pkts = sum(1 for _ in range(round_pkts) if rng_channel.random() < packet_loss_rate)
         delivered_pkts = round_pkts - dropped_pkts
         packets_generated += round_pkts
         packets_dropped += dropped_pkts
@@ -281,6 +308,8 @@ def run_single_trial(
                 if dist < 12.0:
                     t.status = TaskStatus.COMPLETED
                     t.completed_at = total_sim_time
+                    if t.id in tasks and orphaned_tasks_total > 0:
+                        recovered_tasks_completed += 1
                     if agent.path and agent.path[0] == agent.current_task_id:
                         agent.path.pop(0)
                     agent.current_task_id = None
@@ -292,6 +321,7 @@ def run_single_trial(
     # 8. Post-Trial Analysis & Metrics
     kpis = metrics.compute_summary_kpis(agents, tasks, env=env)
     honest_agents = {aid: a for aid, a in agents.items() if not a.is_adversarial}
+    n_honest = len(honest_agents)
     completed_tasks = [t for t in tasks.values() if t.status == TaskStatus.COMPLETED]
     u_actual = sum(t.evaluate_marginal_reward(t.completed_at or max_duration, 0.95) for t in completed_tasks)
     
@@ -302,8 +332,16 @@ def run_single_trial(
     
     tcr = len(completed_tasks) / max(1, len(tasks))
     alive_count = sum(1 for a in honest_agents.values() if a.status != AgentStatus.FAILED)
-    survival_pct = (alive_count / max(1, len(honest_agents))) * 100.0
+    survival_pct = (alive_count / max(1, n_honest)) * 100.0
     replan_latency = 0.0 if canonical_algo == "B0_Static" else (24.5 if canonical_algo in ["B3_CBBA_Recovery", "B5_SWARMOS"] else 0.0)
+    
+    # Disaggregated Rates (P1-03)
+    attack_det_rate = (quarantined_malicious_nodes / max(1, n_attackers)) if n_attackers > 0 else 1.0
+    false_quarantine_rate = (quarantined_honest_nodes / max(1, n_honest)) if n_honest > 0 else 0.0
+    bid_reject_rate = (total_malicious_bids_rejected / max(1, total_malicious_bids_submitted)) if total_malicious_bids_submitted > 0 else 1.0
+    node_quarantine_rate = (len(filter_obj.quarantine) if filter_obj else 0) / max(1, fleet_size)
+    task_recovery_rate = (min(recovered_tasks_completed, orphaned_tasks_total) / max(1, orphaned_tasks_total)) if orphaned_tasks_total > 0 else 1.0
+    telemetry_tpr = (total_kinematic_spoofs_detected / max(1, total_kinematic_spoofs_attempted)) if total_kinematic_spoofs_attempted > 0 else 1.0
     
     trial_id = f"TRIAL-{seed}-{canonical_algo}-{fleet_size}-{task_count}-{packet_loss_rate:.2f}-{adversarial_fraction:.2f}-{attack_class}"
     
@@ -336,8 +374,15 @@ def run_single_trial(
         "packets_dropped": packets_dropped,
         "observed_packet_loss_pct": (packets_dropped / max(1, packets_generated)) * 100.0,
         "PDR": (packets_delivered / max(1, packets_generated)),
-        "TPR": tp / max(1, n_attackers),
-        "FPR": fp / max(1, fleet_size - n_attackers),
+        # Disaggregated Metrics (P1-03)
+        "attack_detection_rate": attack_det_rate,
+        "false_quarantine_rate": false_quarantine_rate,
+        "bid_rejection_rate": bid_reject_rate,
+        "node_quarantine_rate": node_quarantine_rate,
+        "task_recovery_rate": task_recovery_rate,
+        "telemetry_quarantine_tpr": telemetry_tpr,
+        "TPR": attack_det_rate,
+        "FPR": false_quarantine_rate,
         "quarantined_count": len(filter_obj.quarantine) if filter_obj else 0,
         "duration_s": total_sim_time
     }
@@ -351,9 +396,6 @@ def run_single_baseline_trial(
     seed: int = 42,
     algorithm: str = "SWARMOS"
 ) -> Dict[str, Any]:
-    """
-    Unified entrypoint for single baseline verification, ablation tests, and CLI calls.
-    """
     adv_fraction = 0.1 if failure_mode in ["adversarial_nodes", "electronic_warfare_dense"] else 0.0
     attack_class = "D" if adv_fraction > 0 else "A"
     
@@ -370,17 +412,14 @@ def run_single_baseline_trial(
     )
 
 def run_experiment_matrix(spec_path: str = "PAPER_EXPERIMENT_SPEC.json", reduced_benchmark: bool = False) -> Dict[str, Any]:
-    """
-    Executes the experimental matrix specified in the canonical spec.
-    """
     return run_authoritative_pipeline(spec_path=spec_path, reduced=reduced_benchmark)
 
 def run_authoritative_pipeline(spec_path: str = "PAPER_EXPERIMENT_SPEC.json", reduced: bool = False) -> Dict[str, Any]:
     """
     Canonical Experiment Runner driven strictly by PAPER_EXPERIMENT_SPEC.json.
     Produces:
-    1. raw_trials.jsonl - Complete trial-level dataset for auditing.
-    2. results.json - Aggregated statistical configurations with p-values & failure envelopes.
+    1. raw_trials.jsonl - Complete trial-level dataset preserving all independent CRN observations.
+    2. results.json - Aggregated statistical configurations with 95% CIs, Wilcoxon p-values, and Cohen's d effect sizes.
     """
     if not os.path.exists(spec_path):
         raise FileNotFoundError(f"Specification manifest {spec_path} does not exist.")
@@ -440,10 +479,12 @@ def run_authoritative_pipeline(spec_path: str = "PAPER_EXPERIMENT_SPEC.json", re
                                 raw_trials_file.write(json.dumps(res) + "\n")
                                 total_trials += 1
                         
-                        # Statistical Aggregation
+                        # Statistical Aggregation (P1-07 & P1-08)
                         pivot = "CBBA_Standard"
                         pivot_tcrs = [r["TCR"] for r in trial_buckets[pivot]]
                         pivot_opts = [r["optimality_ratio"] for r in trial_buckets[pivot]]
+                        pivot_pdrs = [r["PDR"] for r in trial_buckets[pivot]]
+                        pivot_conv = [r["mean_convergence_ms"] for r in trial_buckets[pivot]]
                         
                         p_values = []
                         test_algos = [a for a in algo_keys if a != pivot]
@@ -454,7 +495,7 @@ def run_authoritative_pipeline(spec_path: str = "PAPER_EXPERIMENT_SPEC.json", re
                             
                         corrected_ps = holm_correction(p_values)
                         
-                        # Store Pivot Summary
+                        # Store Pivot Summary with 95% Confidence Intervals
                         p_summary = trial_buckets[pivot][0].copy()
                         p_summary["fleet_size"] = fleet
                         p_summary["task_count"] = tasks_num
@@ -463,17 +504,24 @@ def run_authoritative_pipeline(spec_path: str = "PAPER_EXPERIMENT_SPEC.json", re
                         p_summary["attack_class"] = attack
                         p_summary["TCR"] = compute_mean(pivot_tcrs)
                         p_summary["TCR_std"] = compute_std(pivot_tcrs)
+                        p_summary["TCR_ci_95"] = list(compute_confidence_interval(pivot_tcrs, 0.95))
                         p_summary["optimality_ratio"] = compute_mean(pivot_opts)
+                        p_summary["optimality_ratio_std"] = compute_std(pivot_opts)
+                        p_summary["optimality_ratio_ci_95"] = list(compute_confidence_interval(pivot_opts, 0.95))
+                        p_summary["PDR_ci_95"] = list(compute_confidence_interval(pivot_pdrs, 0.95))
+                        p_summary["convergence_ms_ci_95"] = list(compute_confidence_interval(pivot_conv, 0.95))
                         p_summary["prob_success_09"] = compute_mean([1.0 if t >= 0.9 else 0.0 for t in pivot_tcrs])
                         p_summary["p_val"] = 1.0
                         p_summary["p_val_holm"] = 1.0
                         p_summary["cohens_d"] = 0.0
                         config_summaries.append(p_summary)
                         
-                        # Store Test Algorithm Summaries
+                        # Store Test Algorithm Summaries with 95% Confidence Intervals
                         for idx, algo in enumerate(test_algos):
                             tcrs = [r["TCR"] for r in trial_buckets[algo]]
                             opts = [r["optimality_ratio"] for r in trial_buckets[algo]]
+                            pdrs = [r["PDR"] for r in trial_buckets[algo]]
+                            convs = [r["mean_convergence_ms"] for r in trial_buckets[algo]]
                             summary = trial_buckets[algo][0].copy()
                             summary["fleet_size"] = fleet
                             summary["task_count"] = tasks_num
@@ -482,7 +530,12 @@ def run_authoritative_pipeline(spec_path: str = "PAPER_EXPERIMENT_SPEC.json", re
                             summary["attack_class"] = attack
                             summary["TCR"] = compute_mean(tcrs)
                             summary["TCR_std"] = compute_std(tcrs)
+                            summary["TCR_ci_95"] = list(compute_confidence_interval(tcrs, 0.95))
                             summary["optimality_ratio"] = compute_mean(opts)
+                            summary["optimality_ratio_std"] = compute_std(opts)
+                            summary["optimality_ratio_ci_95"] = list(compute_confidence_interval(opts, 0.95))
+                            summary["PDR_ci_95"] = list(compute_confidence_interval(pdrs, 0.95))
+                            summary["convergence_ms_ci_95"] = list(compute_confidence_interval(convs, 0.95))
                             summary["prob_success_09"] = compute_mean([1.0 if t >= 0.9 else 0.0 for t in tcrs])
                             summary["p_val"] = p_values[idx]
                             summary["p_val_holm"] = corrected_ps[idx]
@@ -493,11 +546,13 @@ def run_authoritative_pipeline(spec_path: str = "PAPER_EXPERIMENT_SPEC.json", re
     
     final_output = {
         "metadata": {
-            "version": spec.get("version", "4.0.0"),
+            "version": spec.get("version", "4.1.0"),
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "total_trials_executed": total_trials,
             "raw_trials_dataset": raw_trials_path,
-            "spec_source": spec_path
+            "spec_source": spec_path,
+            "rng_architecture": "Isolated 3-Stream CRN (world, attack, channel)",
+            "paired_unit": "(seed, fleet_size, task_count, packet_loss, adversarial_fraction, attack_class)"
         },
         "configs": config_summaries
     }

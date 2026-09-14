@@ -1,26 +1,33 @@
 {
-  "reproducibility_package": {
-    "version": "4.0.0",
-    "timestamp": "2026-09-13T13:50:00Z",
-    "status": "DEFINITIVE_ARCHIVE",
-    "manifest_id": "DOI:10.XXXX/SWARMOS.2026",
-    "environment": {
-      "runtime": "Python 3.10+",
-      "dependencies": ["math", "random", "json", "hashlib", "time", "dataclasses", "typing"]
+  "manifest_version": "4.2.0",
+  "project_name": "SWARMOS",
+  "single_source_of_truth_spec": "PAPER_EXPERIMENT_SPEC.json",
+  "provenance": {
+    "engine": "SWARMOS Authoritative Simulation Core",
+    "runtime": "Python 3.11 / Node.js 20 LTS",
+    "rng_streams": {
+      "stream_1_world": "Deterministic seed for geometry, task locations, agent bases",
+      "stream_2_attack": "seed + 1000 for adversary sampling and poisoning square-wave activation",
+      "stream_3_channel": "seed + 2000 for packet loss erasure modeling"
     },
-    "scientific_invariants": {
-      "optimality_ratio_min": 0.5,
-      "communication_complexity": "O(N)",
-      "recovery_latency_target": "< 500ms"
-    },
-    "experiment_integrity": {
-      "canonical_spec": "PAPER_EXPERIMENT_SPEC.json",
-      "canonical_pipeline": "swarmos/paper/run_all.py",
-      "verification_script": "swarmos/paper/verify_claims.py"
-    },
-    "checksums": {
-      "core_engine": "sha256:d113bcd0-11de-4a82-b38a-38b8279c0022",
-      "anomaly_filter": "sha256:8b1c3bcb-1ba3-4fdc-ce7b-14a468bb8f62"
+    "paired_unit": "(seed, fleet_size, task_count, packet_loss, adversarial_fraction, attack_class)",
+    "hypothesis_testing": {
+      "primary_test": "Paired Wilcoxon Signed-Rank Test with Pratt zero-handling",
+      "correction": "Holm-Bonferroni step-down family-wise error control (alpha = 0.05)",
+      "confidence_intervals": "95% bootstrap / Student t intervals"
     }
+  },
+  "canonical_artifacts": {
+    "raw_trials": "results/canonical/raw_trials.jsonl",
+    "aggregated_results": "results/canonical/results.json",
+    "manuscript": "MANUSCRIPT.md"
+  },
+  "reproduction_commands": {
+    "run_unit_and_invariant_tests": "python3 -m unittest discover -s swarmos/tests -p 'test_*.py'",
+    "run_reduced_matrix": "python3 swarmos/research/reproduce.py --reduced",
+    "run_full_matrix": "python3 swarmos/research/reproduce.py --matrix",
+    "verify_scientific_claims": "python3 swarmos/paper/verify_claims.py",
+    "run_scalability_sweep": "python3 swarmos/research/scalability.py",
+    "run_sensitivity_suite": "python3 swarmos/research/sensitivity.py"
   }
 }

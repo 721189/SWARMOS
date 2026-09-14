@@ -20,9 +20,10 @@ class StrategicAnomalyFilter:
     Provides heuristic anomaly detection and threshold-based isolation of deviant nodes.
     """
 
-    def __init__(self, total_agents: int = 6, max_velocity_mps: float = 100.0):
+    def __init__(self, total_agents: int = 6, max_velocity_mps: float = 100.0, pos_noise_tolerance_m: float = 6.0):
         self.total_agents = total_agents
         self.max_velocity_mps = max_velocity_mps
+        self.pos_noise_tolerance_m = pos_noise_tolerance_m
         self.max_tolerated_anomalies = (total_agents - 1) // 3
         self.trust_scores: Dict[str, float] = {}
         self.agent_statuses: Dict[str, str] = {}
@@ -70,7 +71,7 @@ class StrategicAnomalyFilter:
     ) -> Tuple[bool, Optional[str]]:
         """
         Detects Telemetry Spoofing attacks:
-        1. Velocity check: ||p(t) - p(t-1)|| / delta_t <= v_max
+        1. Velocity check: max(0, ||p(t) - p(t-1)|| - pos_tolerance) / delta_t <= v_max
         2. UWB trilateration residual check if peer distances available
         """
         status = self.agent_statuses.get(agent_id, StrategicAnomalyStatus.TRUSTED)
@@ -81,7 +82,9 @@ class StrategicAnomalyFilter:
             prev_x, prev_y, prev_t = self.last_reported_poses[agent_id]
             dt = max(0.001, timestamp - prev_t)
             displacement = math.hypot(current_x - prev_x, current_y - prev_y)
-            speed = displacement / dt
+            # Filter noise variance
+            eff_disp = max(0.0, displacement - self.pos_noise_tolerance_m)
+            speed = eff_disp / dt
 
             if speed > self.max_velocity_mps:
                 reason = f"Kinematic spoof: velocity {speed:.1f}m/s > physical limit {self.max_velocity_mps:.1f}m/s"
