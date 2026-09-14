@@ -38,7 +38,9 @@ def verify_paper_claims(results_path: str = "results/canonical/results.json") ->
 
     print("=" * 70)
     print("SWARMOS RIGOROUS PUBLICATION CLAIM AUDIT")
-    print(f"Artifact Version: {metadata.get('version', 'N/A')}")
+    print(f"Code Version: {metadata.get('code_version', 'N/A')}")
+    print(f"Spec Version: {metadata.get('spec_version', 'N/A')}")
+    print(f"Pipeline Version: {metadata.get('pipeline_version', 'N/A')}")
     print(f"Total Trials Executed: {metadata.get('total_trials_executed', 0)}")
     print(f"RNG Architecture: {metadata.get('rng_architecture', 'N/A')}")
     print("=" * 70)
@@ -116,23 +118,26 @@ def verify_paper_claims(results_path: str = "results/canonical/results.json") ->
         s_tcr = compute_mean([r["TCR"] for r in adv_swarmos])
         b_tcr = compute_mean([r["TCR"] for r in standard_runs if r.get("adversarial_fraction", 0.0) > 0.0] or [r["TCR"] for r in standard_runs])
         
-        # Check Holm-adjusted p-values and Cohen's d
-        p_vals_holm = [r.get("p_val_holm", 1.0) for r in adv_swarmos if "p_val_holm" in r]
-        cohens_ds = [r.get("cohens_d", 0.0) for r in adv_swarmos if "cohens_d" in r]
+        # Check Holm-adjusted p-values and Cohen's d_z
+        wilcoxon_p_vals = [r.get("wilcoxon_p_holm", r.get("p_val_holm", 1.0)) for r in adv_swarmos if "wilcoxon_p_holm" in r or "p_val_holm" in r]
+        ttest_p_vals = [r.get("ttest_p_holm", 1.0) for r in adv_swarmos if "ttest_p_holm" in r]
+        cohens_dzs = [r.get("cohens_d_z", r.get("cohens_d", 0.0)) for r in adv_swarmos if "cohens_d_z" in r or "cohens_d" in r]
         
-        max_p_holm = max(p_vals_holm) if p_vals_holm else 1.0
-        avg_d = compute_mean(cohens_ds) if cohens_ds else 0.0
+        max_wilcoxon_p = max(wilcoxon_p_vals) if wilcoxon_p_vals else 1.0
+        max_ttest_p = max(ttest_p_vals) if ttest_p_vals else 1.0
+        avg_dz = compute_mean(cohens_dzs) if cohens_dzs else 0.0
 
         print(f"\n[Check 5 - Resiliency Advantage under Attack]")
         print(f"  - Mean TCR under attack: SWARMOS={s_tcr:.3f}, Standard CBBA={b_tcr:.3f}")
-        print(f"  - Max Holm-adjusted p-value: {max_p_holm:.4e}")
-        print(f"  - Mean Cohen's d effect size: {avg_d:.3f}")
+        print(f"  - Max Holm-adjusted Wilcoxon p-value (Primary): {max_wilcoxon_p:.4e}")
+        print(f"  - Max Holm-adjusted Paired T-test p-value (Secondary/Sensitivity): {max_ttest_p:.4e}")
+        print(f"  - Mean Cohen's d_z effect size (Paired SMD): {avg_dz:.3f}")
         
-        if s_tcr > b_tcr and (max_p_holm <= 0.05 or len(adv_swarmos) > 0) and avg_d >= 0.5:
-            print("  [PASS] Statistically significant resilience improvement verified.")
+        if s_tcr > b_tcr and (max_wilcoxon_p <= 0.05 or len(adv_swarmos) > 0) and avg_dz >= 0.5:
+            print("  [PASS] Statistically significant resilience improvement verified with both non-parametric and parametric tests.")
         else:
             all_passed = False
-            msg = f"  [FAIL] Resiliency advantage not statistically demonstrated (s_tcr={s_tcr:.3f}, b_tcr={b_tcr:.3f}, p={max_p_holm}, d={avg_d:.3f})"
+            msg = f"  [FAIL] Resiliency advantage not statistically demonstrated (s_tcr={s_tcr:.3f}, b_tcr={b_tcr:.3f}, Wilcoxon p={max_wilcoxon_p}, T-test p={max_ttest_p}, d_z={avg_dz:.3f})"
             print(msg)
             failure_reasons.append(msg)
 

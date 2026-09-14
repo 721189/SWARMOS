@@ -1,5 +1,7 @@
 {
-  "version": "4.2.0",
+  "code_version": "4.2.0",
+  "spec_version": "4.2.0",
+  "pipeline_version": "4.2.0",
   "seed": 42,
   "description": "Authoritative 4-Arm Factorial Ablation Matrix for SWARMOS Resilience Benchmarks",
   "fleet_sizes": [4, 8, 16, 32, 64, 128],

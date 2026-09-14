@@ -125,8 +125,16 @@ def compute_bootstrap_ci(
     upper_idx = max(0, min(n_resamples - 1, upper_idx))
     return means[lower_idx], means[upper_idx]
 
-def cohens_d(g1: List[float], g2: List[float]) -> float:
-    """Calculates Cohen's d effect size for paired or equal-variance comparisons."""
+def cohens_d_z(g1: List[float], g2: List[float]) -> float:
+    """
+    Calculates Cohen's d_z effect size for paired comparisons.
+    
+    Cohen's d_z is the paired standardized mean difference, defined as:
+        d_z = mean(g1 - g2) / std(g1 - g2)
+    It is the appropriate effect size measure for within-subject or paired-sample
+    designs, representing the mean difference relative to the standard deviation
+    of the differences rather than the pooled standard deviation of independent groups.
+    """
     n = min(len(g1), len(g2))
     if n < 2:
         return 0.0
@@ -136,6 +144,9 @@ def cohens_d(g1: List[float], g2: List[float]) -> float:
     if std_d == 0:
         return 0.0
     return mean_d / std_d
+
+# Backward-compatibility alias
+cohens_d = cohens_d_z
 
 def t_test_paired(g1: List[float], g2: List[float]) -> Tuple[float, float]:
     """Paired Student's T-test with SciPy or validated analytical approximation."""

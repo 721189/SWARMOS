@@ -40,6 +40,7 @@ from swarmos.utils.analysis import (
     compute_std,
     compute_confidence_interval,
     cohens_d,
+    cohens_d_z,
     t_test_paired,
     wilcoxon_signed_rank,
     holm_correction
@@ -550,14 +551,18 @@ def run_authoritative_pipeline(spec_path: str = "PAPER_EXPERIMENT_SPEC.json", re
                         pivot_pdrs = [r["PDR"] for r in trial_buckets[pivot]]
                         pivot_conv = [r["mean_convergence_ms"] for r in trial_buckets[pivot]]
                         
-                        p_values = []
+                        wilcoxon_ps = []
+                        ttest_ps = []
                         test_algos = [a for a in algo_keys if a != pivot]
                         for algo in test_algos:
                             algo_tcrs = [r["TCR"] for r in trial_buckets[algo]]
-                            _, p_val = wilcoxon_signed_rank(pivot_tcrs, algo_tcrs)
-                            p_values.append(p_val)
+                            _, w_p = wilcoxon_signed_rank(pivot_tcrs, algo_tcrs)
+                            _, t_p = t_test_paired(pivot_tcrs, algo_tcrs)
+                            wilcoxon_ps.append(w_p)
+                            ttest_ps.append(t_p)
                             
-                        corrected_ps = holm_correction(p_values)
+                        corrected_w_ps = holm_correction(wilcoxon_ps)
+                        corrected_t_ps = holm_correction(ttest_ps)
                         
                         # Store Pivot Summary with 95% Confidence Intervals
                         p_summary = trial_buckets[pivot][0].copy()
@@ -585,7 +590,12 @@ def run_authoritative_pipeline(spec_path: str = "PAPER_EXPERIMENT_SPEC.json", re
                         p_summary["prob_success_09"] = compute_mean([1.0 if t >= 0.9 else 0.0 for t in pivot_tcrs])
                         p_summary["p_val"] = 1.0
                         p_summary["p_val_holm"] = 1.0
+                        p_summary["wilcoxon_p"] = 1.0
+                        p_summary["wilcoxon_p_holm"] = 1.0
+                        p_summary["ttest_p"] = 1.0
+                        p_summary["ttest_p_holm"] = 1.0
                         p_summary["cohens_d"] = 0.0
+                        p_summary["cohens_d_z"] = 0.0
                         config_summaries.append(p_summary)
                         
                         # Store Test Algorithm Summaries with 95% Confidence Intervals
@@ -617,16 +627,23 @@ def run_authoritative_pipeline(spec_path: str = "PAPER_EXPERIMENT_SPEC.json", re
                             summary["PDR_ci_95"] = list(compute_confidence_interval(pdrs, 0.95))
                             summary["convergence_ms_ci_95"] = list(compute_confidence_interval(convs, 0.95))
                             summary["prob_success_09"] = compute_mean([1.0 if t >= 0.9 else 0.0 for t in tcrs])
-                            summary["p_val"] = p_values[idx]
-                            summary["p_val_holm"] = corrected_ps[idx]
-                            summary["cohens_d"] = cohens_d(tcrs, pivot_tcrs)
+                            summary["p_val"] = wilcoxon_ps[idx]
+                            summary["p_val_holm"] = corrected_w_ps[idx]
+                            summary["wilcoxon_p"] = wilcoxon_ps[idx]
+                            summary["wilcoxon_p_holm"] = corrected_w_ps[idx]
+                            summary["ttest_p"] = ttest_ps[idx]
+                            summary["ttest_p_holm"] = corrected_t_ps[idx]
+                            summary["cohens_d"] = cohens_d_z(tcrs, pivot_tcrs)
+                            summary["cohens_d_z"] = cohens_d_z(tcrs, pivot_tcrs)
                             config_summaries.append(summary)
 
     raw_trials_file.close()
     
     final_output = {
         "metadata": {
-            "version": spec.get("version", "4.1.0"),
+            "code_version": spec.get("code_version", "4.2.0"),
+            "spec_version": spec.get("spec_version", "4.2.0"),
+            "pipeline_version": spec.get("pipeline_version", "4.2.0"),
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "total_trials_executed": total_trials,
             "raw_trials_dataset": raw_trials_path,
