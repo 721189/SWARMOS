@@ -47,13 +47,15 @@ class SwarmEnvironment:
         comm_range: float = 350.0,
         packet_loss_rate: float = 0.0,
         seed: int = 42,
-        rng_channel: Optional[random.Random] = None
+        rng_channel: Optional[random.Random] = None,
+        mac_protocol: str = "CSMA"
     ):
         self.width = width
         self.height = height
         self.comm_range = comm_range
         self.packet_loss_rate = packet_loss_rate
         self.rng = rng_channel if rng_channel is not None else random.Random(seed)
+        self.mac_protocol = mac_protocol
         
         self.agents: Dict[str, Agent] = {}
         self.tasks: Dict[str, Task] = {}
@@ -105,8 +107,19 @@ class SwarmEnvironment:
         self.packets_generated += 1
         self.bytes_transmitted += payload_bytes
 
+        # Calculate effective loss rate
+        effective_loss = self.packet_loss_rate
+        if self.mac_protocol == "CSMA":
+            # In CSMA, packet collisions increase with the number of agents actively communicating
+            n_agents = len(self.agents)
+            collision_prob = 0.012 * n_agents # 1.2% collision probability per agent in the fleet
+            effective_loss = min(0.99, self.packet_loss_rate + collision_prob)
+        elif self.mac_protocol == "D-TDMA":
+            # D-TDMA avoids collisions completely, so the loss is purely the physical channel drop
+            pass
+
         # Stochastic RF packet loss
-        if self.rng.random() < self.packet_loss_rate:
+        if self.rng.random() < effective_loss:
             self.packets_dropped += 1
             return False
 

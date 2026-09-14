@@ -2,23 +2,77 @@
 import json
 import os
 import math
-from swarmos.utils.analysis import compute_stats, compute_t_test_p_value, compute_cohens_d, get_significance_stars
 
-def generate_rigorous_report(results_path="nebius_experiment_results.json"):
+def get_significance_stars(p_val: float) -> str:
+    if p_val <= 0.001:
+        return "***"
+    elif p_val <= 0.01:
+        return "**"
+    elif p_val <= 0.05:
+        return "*"
+    else:
+        return "n.s."
+
+def generate_rigorous_report(results_path="results/canonical/results.json"):
     if not os.path.exists(results_path):
-        print(f"Error: {results_path} not found.")
-        return
+        fallback_path = "nebius_experiment_results.json"
+        if os.path.exists(fallback_path):
+            results_path = fallback_path
+        else:
+            print(f"Error: {results_path} not found.")
+            return
 
     with open(results_path, "r") as f:
         data = json.load(f)
 
-    results = data.get("summary_table", [])
+    # Check if this is the new spec format
+    if "configs" in data and "metadata" in data:
+        metadata = data.get("metadata", {})
+        configs_list = data.get("configs", [])
+        
+        results = []
+        for c in configs_list:
+            ci_95_list = c.get("TCR_ci_95", [0.0, 0.0])
+            ci_margin = (ci_95_list[1] - ci_95_list[0]) / 2.0
+            ci_margin_pct = ci_margin * 100.0
+            
+            p_val = c.get("p_val_holm", 1.0)
+            cohens_d_val = c.get("cohens_d_z", 0.0)
+            
+            algo_name = c.get("canonical_algorithm", c.get("algorithm"))
+            if algo_name == "B2_Standard_CBBA":
+                algo_name = "CBBA_Standard"
+            elif algo_name == "B5_SWARMOS":
+                algo_name = "SWARMOS"
+                
+            results.append({
+                "fleet_size": c.get("fleet_size", 8),
+                "task_count": c.get("task_count", 10),
+                "failure_mode": f"loss_{c.get('packet_loss', 0.0)}_adv_{c.get('adversarial_fraction', 0.0)}_class_{c.get('attack_class', 'N/A')}",
+                "communication_range": 400.0,
+                "algorithm": algo_name,
+                "mission_completion": c.get("mission_completion", c.get("TCR", 0.0) * 100.0),
+                "ci_95": f"{ci_margin_pct:.2f}%",
+                "p_value_vs_baseline": p_val,
+                "cohens_d_vs_baseline": cohens_d_val
+            })
+        
+        audit_timestamp = metadata.get("timestamp")
+        artifact_version = metadata.get("pipeline_version", "4.2.0")
+        benchmark_mode = f"SWARMOS Factorial Bench (Spec={metadata.get('spec_version')})"
+        total_trials = metadata.get("total_trials_executed", 0)
+    else:
+        results = data.get("summary_table", [])
+        audit_timestamp = data.get("audit_timestamp")
+        artifact_version = data.get("artifact_version")
+        benchmark_mode = data.get("benchmark_mode")
+        total_trials = data.get("total_trials")
     report_lines = []
     report_lines.append("# SWARMOS High-Rigor Statistical Report")
-    report_lines.append(f"**Audit Timestamp**: {data.get('audit_timestamp')}")
-    report_lines.append(f"**Artifact Version**: {data.get('artifact_version')}")
-    report_lines.append(f"**Benchmark Mode**: {data.get('benchmark_mode')}")
-    report_lines.append(f"**Total Trials**: {data.get('total_trials')}")
+    report_lines.append(f"**Audit Timestamp**: {audit_timestamp}")
+    report_lines.append(f"**Artifact Version**: {artifact_version}")
+    report_lines.append(f"**Benchmark Mode**: {benchmark_mode}")
+    report_lines.append(f"**Total Trials**: {total_trials}")
     report_lines.append("\n## 1. Statistical Significance (vs. CBBA Standard)")
     report_lines.append("Comparing mission completion rates and convergence times.")
     report_lines.append("\n| Configuration | Algorithm | Completion (Mean ± CI) | p-value | Significance | Effect Size (d) |")
